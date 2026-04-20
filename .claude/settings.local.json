@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/studie/Semester_3/content/Thesis/impl/sample_data -type f -exec basename {} \\\\;)",
+      "WebSearch",
+      "WebFetch(domain:dev.fitbit.com)",
+      "Bash(python -c \"import yaml; print\\('PyYAML available:', yaml.__version__\\)\")",
+      "Bash(python -m src \"sample_data/mHealth/example data/fitbit-example \\(1\\).json\" --source fitbit -o output_test.json)"
+    ]
+  }
+}

@@ -1,0 +1,864 @@
+INPUT:
+{
+  "pilot": "CERTH"
+}
+OUTPUT:
+[
+  {
+    "email": "s1.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638968118982635900,
+        "totalTime": 3296144770,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 11,
+        "level": 1,
+        "moneyPaid": 11
+      },
+      {
+        "startTime": 638975300884278700,
+        "totalTime": 1872425670,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 10.2,
+        "level": 1,
+        "moneyPaid": 10.2
+      },
+      {
+        "startTime": 638975303271245600,
+        "totalTime": 2333070590,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 7,
+        "itemQuantitiesListed": 7,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 40.6,
+        "level": 2,
+        "moneyPaid": 40.6
+      },
+      {
+        "startTime": 638975306115892000,
+        "totalTime": 2497159460,
+        "itemTypesBought": 8,
+        "itemTypesListed": 8,
+        "itemQuantitiesBought": 18,
+        "itemQuantitiesListed": 18,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 70,
+        "level": 4,
+        "moneyPaid": 70
+      },
+      {
+        "startTime": 638987406775403800,
+        "totalTime": 2192766200,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 13,
+        "itemQuantitiesListed": 13,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 42.4,
+        "level": 3,
+        "moneyPaid": 42.4
+      },
+      {
+        "startTime": 638993430182581100,
+        "totalTime": 2262742970,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 8,
+        "itemQuantitiesListed": 8,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 34.5,
+        "level": 3,
+        "moneyPaid": 34.5
+      },
+      {
+        "startTime": 639031486128973700,
+        "totalTime": 1787763850,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 13.5,
+        "level": 1,
+        "moneyPaid": 33
+      },
+      {
+        "startTime": 639031488500794500,
+        "totalTime": 2205261280,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 15,
+        "itemQuantitiesListed": 14,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 22.4,
+        "level": 3,
+        "moneyPaid": 294.4
+      }
+    ]
+  },
+  {
+    "email": "s10.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638968946925285400,
+        "totalTime": 3243730940,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 19.5,
+        "level": 1,
+        "moneyPaid": 19.5
+      },
+      {
+        "startTime": 639025187999137800,
+        "totalTime": 5084242250,
+        "itemTypesBought": 3,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 3,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 13,
+        "level": 1,
+        "moneyPaid": 13
+      },
+      {
+        "startTime": 639025197182443300,
+        "totalTime": 3948543150,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 9,
+        "itemQuantitiesListed": 9,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 2,
+        "itemsBoughtValue": 38,
+        "level": 2,
+        "moneyPaid": 38
+      },
+      {
+        "startTime": 639025202626351500,
+        "totalTime": 1927361620,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 7,
+        "itemQuantitiesListed": 7,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 26,
+        "level": 2,
+        "moneyPaid": 26
+      },
+      {
+        "startTime": 639025205364975900,
+        "totalTime": 3785747180,
+        "itemTypesBought": 8,
+        "itemTypesListed": 8,
+        "itemQuantitiesBought": 16,
+        "itemQuantitiesListed": 16,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 51.4,
+        "level": 4,
+        "moneyPaid": 0
+      }
+    ]
+  },
+  {
+    "email": "s2.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638968085518056600,
+        "totalTime": 3723105160,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 6,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 3,
+        "itemQuantitiesUnlisted": 3,
+        "itemsBoughtValue": 28,
+        "level": 1,
+        "moneyPaid": 28
+      }
+    ]
+  },
+  {
+    "email": "s3.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638968985767441500,
+        "totalTime": 2306080250,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 14.7,
+        "level": 1,
+        "moneyPaid": 14.7
+      },
+      {
+        "startTime": 638995260684556500,
+        "totalTime": 2182882240,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 29,
+        "level": 1,
+        "moneyPaid": 29
+      },
+      {
+        "startTime": 638995266563925000,
+        "totalTime": 2061040640,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 6.5,
+        "level": 1,
+        "moneyPaid": 6.5
+      },
+      {
+        "startTime": 638995269979318100,
+        "totalTime": 2068595930,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 9,
+        "itemQuantitiesListed": 9,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 25,
+        "level": 2,
+        "moneyPaid": 25
+      },
+      {
+        "startTime": 639001293079914100,
+        "totalTime": 2382800030,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 27,
+        "level": 1,
+        "moneyPaid": 27
+      },
+      {
+        "startTime": 639001297003784600,
+        "totalTime": 1912852930,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 12,
+        "itemQuantitiesListed": 12,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 85.5,
+        "level": 2,
+        "moneyPaid": 85.5
+      },
+      {
+        "startTime": 639013422086861800,
+        "totalTime": 2324826260,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 8,
+        "itemQuantitiesListed": 8,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 21.1,
+        "level": 2,
+        "moneyPaid": 21.1
+      },
+      {
+        "startTime": 639013425836646000,
+        "totalTime": 1851986170,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 6,
+        "itemQuantitiesListed": 6,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 45.5,
+        "level": 2,
+        "moneyPaid": 45.5
+      }
+    ]
+  },
+  {
+    "email": "s4.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638974380644407900,
+        "totalTime": 2776036830,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 11,
+        "level": 1,
+        "moneyPaid": 11
+      }
+    ]
+  },
+  {
+    "email": "s5.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638975017578747000,
+        "totalTime": 3439015190,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 5,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 14.5,
+        "level": 1,
+        "moneyPaid": 14.5
+      },
+      {
+        "startTime": 638980597363838800,
+        "totalTime": 2240459830,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 17.5,
+        "level": 1,
+        "moneyPaid": 0
+      },
+      {
+        "startTime": 638982872101066000,
+        "totalTime": 5280412620,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 5,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 24.5,
+        "level": 1,
+        "moneyPaid": 0
+      },
+      {
+        "startTime": 638982994217593700,
+        "totalTime": 1147733700,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 12.5,
+        "level": 1,
+        "moneyPaid": 12.5
+      },
+      {
+        "startTime": 638982996032185500,
+        "totalTime": 1107410730,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 5,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 19,
+        "level": 1,
+        "moneyPaid": 19
+      },
+      {
+        "startTime": 638996131195795500,
+        "totalTime": 1651798890,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 23,
+        "level": 1,
+        "moneyPaid": 23
+      }
+    ]
+  },
+  {
+    "email": "s6.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638974993541111800,
+        "totalTime": 3274512030,
+        "itemTypesBought": 3,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 3,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 10.5,
+        "level": 1,
+        "moneyPaid": 10.5
+      },
+      {
+        "startTime": 638975009469364400,
+        "totalTime": 1765295950,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 18,
+        "level": 1,
+        "moneyPaid": 18
+      },
+      {
+        "startTime": 639025198939878400,
+        "totalTime": 3724770580,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 7,
+        "itemQuantitiesListed": 7,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 19,
+        "level": 2,
+        "moneyPaid": 19
+      },
+      {
+        "startTime": 639025204055592400,
+        "totalTime": 2362316560,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 7,
+        "itemQuantitiesListed": 7,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 10.1,
+        "level": 2,
+        "moneyPaid": 10.1
+      },
+      {
+        "startTime": 639025206805641600,
+        "totalTime": 2502594330,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 14,
+        "itemQuantitiesListed": 14,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 51.4,
+        "level": 3,
+        "moneyPaid": 51.4
+      }
+    ]
+  },
+  {
+    "email": "s7.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638987086932807400,
+        "totalTime": 1704603160,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 6.5,
+        "level": 1,
+        "moneyPaid": 6.5
+      },
+      {
+        "startTime": 638987118594300900,
+        "totalTime": 2027742700,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 15,
+        "level": 1,
+        "moneyPaid": 15
+      },
+      {
+        "startTime": 639056551049710000,
+        "totalTime": 3431474370,
+        "itemTypesBought": 8,
+        "itemTypesListed": 8,
+        "itemQuantitiesBought": 18,
+        "itemQuantitiesListed": 18,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 55.5,
+        "level": 4,
+        "moneyPaid": 55.5
+      }
+    ]
+  },
+  {
+    "email": "s8.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638990042231163400,
+        "totalTime": 4359389140,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 23,
+        "level": 1,
+        "moneyPaid": 23
+      },
+      {
+        "startTime": 638991609722824700,
+        "totalTime": 1699025270,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 9,
+        "level": 1,
+        "moneyPaid": 10
+      },
+      {
+        "startTime": 638991612462801500,
+        "totalTime": 1220331960,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 11.5,
+        "level": 1,
+        "moneyPaid": 11.5
+      },
+      {
+        "startTime": 638992543210572200,
+        "totalTime": 1986828470,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 21,
+        "level": 1,
+        "moneyPaid": 21
+      },
+      {
+        "startTime": 638994283572889100,
+        "totalTime": 2822194880,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 9.2,
+        "level": 1,
+        "moneyPaid": 9.2
+      },
+      {
+        "startTime": 638996133980837100,
+        "totalTime": 1447056850,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 11,
+        "level": 1,
+        "moneyPaid": 11
+      },
+      {
+        "startTime": 638997806071627000,
+        "totalTime": 1610539150,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 8,
+        "itemQuantitiesListed": 8,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 19.6,
+        "level": 2,
+        "moneyPaid": 19.6
+      },
+      {
+        "startTime": 639003016712781200,
+        "totalTime": 2142170930,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 13,
+        "itemQuantitiesListed": 13,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 37,
+        "level": 3,
+        "moneyPaid": 37
+      },
+      {
+        "startTime": 639020271803628000,
+        "totalTime": 2802052440,
+        "itemTypesBought": 8,
+        "itemTypesListed": 8,
+        "itemQuantitiesBought": 17,
+        "itemQuantitiesListed": 17,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 90,
+        "level": 4,
+        "moneyPaid": 90
+      },
+      {
+        "startTime": 639037332475488500,
+        "totalTime": 2105479990,
+        "itemTypesBought": 6,
+        "itemTypesListed": 6,
+        "itemQuantitiesBought": 9,
+        "itemQuantitiesListed": 9,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 31.7,
+        "level": 3,
+        "moneyPaid": 31.7
+      },
+      {
+        "startTime": 639041035079708900,
+        "totalTime": 3559504530,
+        "itemTypesBought": 8,
+        "itemTypesListed": 8,
+        "itemQuantitiesBought": 16,
+        "itemQuantitiesListed": 16,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 92,
+        "level": 4,
+        "moneyPaid": 92
+      }
+    ]
+  },
+  {
+    "email": "s9.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638986457737799000,
+        "totalTime": 1556245150,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 10.2,
+        "level": 1,
+        "moneyPaid": 10.2
+      }
+    ]
+  },
+  {
+    "email": "s11.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638998558835117400,
+        "totalTime": 1596844060,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 25,
+        "level": 1,
+        "moneyPaid": 25
+      }
+    ]
+  },
+  {
+    "email": "s12.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638999438828667800,
+        "totalTime": 2364245390,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 1,
+        "itemQuantitiesUnlisted": 1,
+        "itemsBoughtValue": 18,
+        "level": 1,
+        "moneyPaid": 18
+      }
+    ]
+  },
+  {
+    "email": "s13.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 638999408465161500,
+        "totalTime": 2675135360,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 10,
+        "level": 1,
+        "moneyPaid": 10
+      }
+    ]
+  },
+  {
+    "email": "s15.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 639017665264824000,
+        "totalTime": 2320842540,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 18.3,
+        "level": 1,
+        "moneyPaid": 20
+      }
+    ]
+  },
+  {
+    "email": "s16.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 639009757638957800,
+        "totalTime": 2828927580,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 21.5,
+        "level": 1,
+        "moneyPaid": 21.5
+      }
+    ]
+  },
+  {
+    "email": "s17.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 639046032260216400,
+        "totalTime": 5486242250,
+        "itemTypesBought": 2,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 3,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 12,
+        "level": 1,
+        "moneyPaid": 0
+      },
+      {
+        "startTime": 639046047606520000,
+        "totalTime": 6513367580,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 7,
+        "level": 1,
+        "moneyPaid": 7
+      },
+      {
+        "startTime": 639052266355869800,
+        "totalTime": 20061156660,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 19.5,
+        "level": 1,
+        "moneyPaid": 19.5
+      }
+    ]
+  },
+  {
+    "email": "s19.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 639051211156062000,
+        "totalTime": 1743918480,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 12,
+        "level": 1,
+        "moneyPaid": 12
+      }
+    ]
+  },
+  {
+    "email": "s20.p12@comfortage.net",
+    "results": [
+      {
+        "startTime": 639053716092312300,
+        "totalTime": 2048710240,
+        "itemTypesBought": 4,
+        "itemTypesListed": 4,
+        "itemQuantitiesBought": 4,
+        "itemQuantitiesListed": 4,
+        "itemTypesUnlisted": 0,
+        "itemQuantitiesUnlisted": 0,
+        "itemsBoughtValue": 25,
+        "level": 1,
+        "moneyPaid": 25
+      }
+    ]
+  }
+]

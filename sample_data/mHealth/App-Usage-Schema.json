@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "App Usage Data Payload (Finalized)",
+  "description": "Standardized schema for tracking mHealth app daily usage and user engagement in the Comfortage project.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "userId": {
+        "type": "string",
+        "description": "Unique identifier of the user (UUID)."
+      },
+      "date": {
+        "type": "string",
+        "format": "date",
+        "description": "The date for which usage data is being reported (YYYY-MM-DD)."
+      },
+      "dataType": {
+        "type": "string",
+        "const": "app-usage-daily",
+        "description": "Data type identifier for app usage data routing."
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "The UTC timestamp when this data was collected or transmitted."
+      },
+      "metrics": {
+        "type": "object",
+        "description": "Daily aggregated usage metrics grouped by app domain.",
+        "properties": {
+          "exercises": {
+            "type": "object",
+            "description": "Exercise engagement metrics.",
+            "properties": {
+              "completed": {
+                "type": "array",
+                "description": "Exercises completed on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "exerciseId": { "type": "integer", "description": "ID of the exercise completed." },
+                    "week": { "type": "integer", "description": "Week number in the program." },
+                    "day": { "type": "integer", "description": "Day number in the week." },
+                    "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp when exercise was completed." }
+                  },
+                  "required": ["exerciseId", "completedAt"]
+                }
+              }
+            }
+          },
+          "recipes": {
+            "type": "object",
+            "description": "Recipe interaction metrics.",
+            "properties": {
+              "favorited": {
+                "type": "array",
+                "description": "Recipes added to favorites on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "recipeId": { "type": "integer", "description": "ID of the recipe favorited." },
+                    "timestamp": { "type": "string", "format": "date-time", "description": "When the recipe was favorited." }
+                  },
+                  "required": ["recipeId"]
+                }
+              }
+            }
+          },
+          "education": {
+            "type": "object",
+            "description": "Educational content engagement.",
+            "properties": {
+              "lessonsStarted": {
+                "type": "array",
+                "description": "Lessons started on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "lessonId": { "type": "integer", "description": "ID of the lesson." },
+                    "startedAt": { "type": "string", "format": "date-time", "description": "When the lesson was started." }
+                  },
+                  "required": ["lessonId", "startedAt"]
+                }
+              },
+              "lessonsCompleted": {
+                "type": "array",
+                "description": "Lessons completed on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "lessonId": { "type": "integer", "description": "ID of the lesson." },
+                    "completedAt": { "type": "string", "format": "date-time", "description": "When the lesson was completed." }
+                  },
+                  "required": ["lessonId", "completedAt"]
+                }
+              }
+            }
+          },
+          "assessments": {
+            "type": "object",
+            "description": "Assessment and questionnaire activities.",
+            "properties": {
+              "profileQuestionsAnswered": {
+                "type": "array",
+                "description": "Profile questions answered on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "questionId": { "type": "integer", "description": "ID of the question." },
+                    "questionCategoryId": { "type": "integer", "description": "Category of the question (if available)." },
+                    "answeredAt": { "type": "string", "format": "date-time", "description": "When the question was answered." }
+                  },
+                  "required": ["questionId"]
+                }
+              }
+            }
+          },
+          "gamification": {
+            "type": "object",
+            "description": "Badges and rewards.",
+            "properties": {
+              "badgesEarned": {
+                "type": "array",
+                "description": "Badges earned/unlocked on this day.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "badgeId": { "type": "integer", "description": "ID of the badge." },
+                    "unlockedAt": { "type": "string", "format": "date-time", "description": "When the badge was unlocked." }
+                  },
+                  "required": ["badgeId", "unlockedAt"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "userId",
+      "date",
+      "dataType",
+      "timestamp",
+      "metrics"
+    ]
+  }
+}

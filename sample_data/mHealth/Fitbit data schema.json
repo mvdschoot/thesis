@@ -1,0 +1,296 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fitbit Measurement Payload",
+  "description": "Comprehensive data schema for Fitbit Charge 6 exports including Heart Rate, Sleep, Activity Summaries, and Intraday Metrics. Corrected for strict validation, large integers, and non-UTC local timestamps.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "userId": {
+        "type": "string",
+        "description": "Unique identifier of the user (UUID)."
+      },
+      "measurementType": {
+        "type": "string",
+        "enum": [
+          "heart-rate-intraday", 
+          "sleep-log", 
+          "calories",
+          "steps",
+          "distance",
+          "floors",
+          "elevation",
+          "activity-summary"
+        ],
+        "description": "The category of the Fitbit data being transmitted."
+      },
+      "measurementDateTime": {
+        "type": "string",
+        "format": "date-time",
+        "description": "The UTC date and time relevant to the measurement."
+      },
+      "measurementValue": {
+        "type": "object",
+        "description": "The detailed metrics object, morphing based on the measurementType.",
+        "oneOf": [
+          {
+            "title": "Heart Rate Payload",
+            "type": "object",
+            "required": ["activities-heart", "activities-heart-intraday"],
+            "properties": {
+              "activities-heart": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dateTime": { "type": "string", "format": "date" },
+                    "value": {
+                      "type": "object",
+                      "properties": {
+                        "heartRateZones": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": { "type": "string" },
+                              "min": { "type": "integer" },
+                              "max": { "type": "integer" },
+                              "minutes": { "type": "integer" },
+                              "caloriesOut": { "type": "number" }
+                            }
+                          }
+                        },
+                        "customHeartRateZones": { "type": "array" },
+                        "restingHeartRate": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              },
+              "activities-heart-intraday": {
+                "type": "object",
+                "properties": {
+                  "datasetType": { "type": "string" },
+                  "datasetInterval": { "type": "integer" },
+                  "dataset": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": { "type": "string" },
+                        "value": { "type": "integer" }
+                      },
+                      "required": ["time", "value"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "title": "Sleep Log Payload",
+            "type": "object",
+            "required": ["sleep"],
+            "properties": {
+              "summary": {
+                "type": "object",
+                "properties": {
+                  "totalTimeInBed": { "type": "integer" },
+                  "totalSleepRecords": { "type": "integer" },
+                  "totalMinutesAsleep": { "type": "integer" },
+                  "stages": {
+                    "type": "object",
+                    "properties": {
+                      "rem": { "type": "integer" },
+                      "deep": { "type": "integer" },
+                      "wake": { "type": "integer" },
+                      "light": { "type": "integer" }
+                    }
+                  }
+                }
+              },
+              "sleep": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "logId": { "type": ["integer", "string"], "description": "Type allows string to bypass JS int64 precision limits." },
+                    "dateOfSleep": { "type": "string", "format": "date" },
+                    "startTime": { "type": "string", "description": "Local timestamp without timezone offset (e.g., YYYY-MM-DDTHH:MM:SS.SSS)." },
+                    "endTime": { "type": "string", "description": "Local timestamp without timezone offset (e.g., YYYY-MM-DDTHH:MM:SS.SSS)." },
+                    "duration": { "type": "integer" },
+                    "efficiency": { "type": "integer" },
+                    "isMainSleep": { "type": "boolean" },
+                    "timeInBed": { "type": "integer" },
+                    "minutesAsleep": { "type": "integer" },
+                    "minutesAwake": { "type": "integer" },
+                    "minutesToFallAsleep": { "type": "integer" },
+                    "levels": {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "level": { "type": "string" },
+                              "seconds": { "type": "integer" },
+                              "dateTime": { "type": "string", "description": "Local timestamp without timezone offset." }
+                            }
+                          }
+                        },
+                        "shortData": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "level": { "type": "string" },
+                              "seconds": { "type": "integer" },
+                              "dateTime": { "type": "string", "description": "Local timestamp without timezone offset." }
+                            }
+                          }
+                        },
+                        "summary": { "type": "object" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "title": "Calories Payload",
+            "type": "object",
+            "required": ["activities-calories", "activities-calories-intraday"],
+            "properties": {
+              "activities-calories": { 
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dateTime": { "type": "string", "format": "date" },
+                    "value": { "type": "string" }
+                  }
+                }
+              },
+              "activities-calories-intraday": {
+                "type": "object",
+                "properties": {
+                  "datasetType": { "type": "string" },
+                  "datasetInterval": { "type": "integer" },
+                  "dataset": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": { "type": "string" },
+                        "value": { "type": "number" },
+                        "level": { "type": "integer" },
+                        "mets": { "type": "integer" }
+                      },
+                      "required": ["time", "value", "mets", "level"]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "title": "Activity Summary Payload",
+            "type": "object",
+            "required": ["activity"],
+            "properties": {
+              "activity": {
+                "type": "object",
+                "properties": {
+                  "goals": {
+                    "type": "object",
+                    "properties": {
+                      "activeMinutes": { "type": "integer" },
+                      "floors": { "type": "integer" },
+                      "distance": { "type": "number" },
+                      "caloriesOut": { "type": "integer" },
+                      "steps": { "type": "integer" }
+                    }
+                  },
+                  "summary": {
+                    "type": "object",
+                    "properties": {
+                      "distances": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "activity": { "type": "string" },
+                            "distance": { "type": "number" }
+                          }
+                        }
+                      },
+                      "caloriesOut": { "type": "integer" },
+                      "steps": { "type": "integer" },
+                      "sedentaryMinutes": { "type": "integer" },
+                      "lightlyActiveMinutes": { "type": "integer" },
+                      "fairlyActiveMinutes": { "type": "integer" },
+                      "veryActiveMinutes": { "type": "integer" },
+                      "restingHeartRate": { "type": "integer" }
+                    }
+                  },
+                  "activities": {
+                    "type": "array"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "title": "General Physical Metrics (Steps, Distance, Floors, Elevation)",
+            "type": "object",
+            "anyOf": [
+              { "required": ["activities-steps"] },
+              { "required": ["activities-distance"] },
+              { "required": ["activities-floors"] },
+              { "required": ["activities-elevation"] }
+            ],
+            "patternProperties": {
+              "^activities-(steps|distance|floors|elevation)$": { 
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dateTime": { "type": "string", "format": "date" },
+                    "value": { "type": "string" }
+                  }
+                }
+              },
+              "^activities-(steps|distance|floors|elevation)-intraday$": {
+                "type": "object",
+                "properties": {
+                  "datasetType": { "type": "string" },
+                  "datasetInterval": { "type": "integer" },
+                  "dataset": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "time": { "type": "string" },
+                        "value": { "type": "number" }
+                      },
+                      "required": ["time", "value"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "required": [
+      "userId",
+      "measurementType",
+      "measurementDateTime",
+      "measurementValue"
+    ]
+  }
+}

@@ -1,0 +1,135 @@
+[
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "steps",
+    "measurementDateTime": "2025-10-15T00:00:00.000000Z",
+    "measurementValue": {
+      "activities-steps": [
+        {
+          "value": "3475",
+          "dateTime": "2025-10-15"
+        }
+      ],
+      "activities-steps-intraday": {
+        "datasetType": "minute",
+        "datasetInterval": 15,
+        "dataset": [
+          { "time": "08:00:00", "value": 258 },
+          { "time": "09:15:00", "value": 405 },
+          { "time": "09:30:00", "value": 446 },
+          { "time": "12:45:00", "value": 287 },
+          { "time": "16:45:00", "value": 1085 },
+          { "time": "17:00:00", "value": 265 },
+          { "time": "17:45:00", "value": 234 }
+        ]
+      }
+    }
+  },
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "distance",
+    "measurementDateTime": "2025-10-15T00:00:00.000000Z",
+    "measurementValue": {
+      "activities-distance": [
+        {
+          "value": "2.74064",
+          "dateTime": "2025-10-15"
+        }
+      ],
+      "activities-distance-intraday": {
+        "datasetType": "minute",
+        "datasetInterval": 15,
+        "dataset": [
+          { "time": "08:00:00", "value": 0.211728 },
+          { "time": "09:15:00", "value": 0.31446 },
+          { "time": "09:30:00", "value": 0.375511 },
+          { "time": "12:45:00", "value": 0.192577 },
+          { "time": "16:45:00", "value": 0.903145 }
+        ]
+      }
+    }
+  },
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "calories",
+    "measurementDateTime": "2025-10-15T00:00:00.000000Z",
+    "measurementValue": {
+      "activities-calories": [
+        {
+          "value": "1835",
+          "dateTime": "2025-10-15"
+        }
+      ],
+      "activities-calories-intraday": {
+        "datasetType": "minute",
+        "datasetInterval": 15,
+        "dataset": [
+          { "time": "08:00:00", "value": 37.1973, "mets": 350, "level": 1 },
+          { "time": "09:15:00", "value": 44.424204, "mets": 418, "level": 1 },
+          { "time": "09:30:00", "value": 48.462768, "mets": 456, "level": 1 },
+          { "time": "16:45:00", "value": 94.799976, "mets": 892, "level": 2 }
+        ]
+      }
+    }
+  },
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "floors",
+    "measurementDateTime": "2025-10-15T00:00:00.000000Z",
+    "measurementValue": {
+      "activities-floors": [
+        {
+          "value": "0",
+          "dateTime": "2025-10-15"
+        }
+      ],
+      "activities-floors-intraday": {
+        "datasetType": "minute",
+        "datasetInterval": 15,
+        "dataset": []
+      }
+    }
+  },
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "heart-rate-intraday",
+    "measurementDateTime": "2025-09-13T00:00:00.000000Z",
+    "measurementValue": {
+      "activities-heart": [
+        {
+          "dateTime": "2025-09-13",
+          "value": {
+            "heartRateZones": [
+              {
+                "name": "Out of Range",
+                "min": 30,
+                "max": 127,
+                "minutes": 1440,
+                "caloriesOut": 1559.55
+              }
+            ],
+            "customHeartRateZones": []
+          }
+        }
+      ],
+      "activities-heart-intraday": {
+        "datasetType": "minute",
+        "datasetInterval": 15,
+        "dataset": []
+      }
+    }
+  },
+  {
+    "userId": "0198559a-826b-70a5-ac45-a204f33f1220",
+    "measurementType": "sleep-log",
+    "measurementDateTime": "2025-09-13T00:00:00.000000Z",
+    "measurementValue": {
+      "sleep": [],
+      "summary": {
+        "totalTimeInBed": 0,
+        "totalSleepRecords": 0,
+        "totalMinutesAsleep": 0
+      }
+    }
+  }
+]

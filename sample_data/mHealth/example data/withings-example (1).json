@@ -1,0 +1,62 @@
+[
+  {
+    "userId": "019686c7-cecd-7558-8018-d55a4ac848c5",
+    "measurementType": {
+      "typeValue": 6,
+      "typeDescription": "Fat Ratio"
+    },
+    "attrib": 0,
+    "measurementDateTime": "2025-04-05T07:39:01.000000Z",
+    "createdDateTime": "2025-04-05T07:39:43.000000Z",
+    "modifiedDateTime": "2025-04-05T07:39:43.000000Z",
+    "measurementValue": 22.787
+  },
+  {
+    "userId": "019686c7-cecd-7558-8018-d55a4ac848c5",
+    "measurementType": {
+      "typeValue": 5,
+      "typeDescription": "Fat Free Mass"
+    },
+    "attrib": 0,
+    "measurementDateTime": "2025-04-05T07:39:01.000000Z",
+    "createdDateTime": "2025-04-05T07:39:43.000000Z",
+    "modifiedDateTime": "2025-04-05T07:39:43.000000Z",
+    "measurementValue": 65.94
+  },
+  {
+    "userId": "019686c7-cecd-7558-8018-d55a4ac848c5",
+    "measurementType": {
+      "typeValue": 1,
+      "typeDescription": "Weight"
+    },
+    "attrib": 0,
+    "measurementDateTime": "2025-04-13T08:48:40.000000Z",
+    "createdDateTime": "2025-04-13T08:49:23.000000Z",
+    "modifiedDateTime": "2025-04-13T08:49:23.000000Z",
+    "measurementValue": 84.483
+  },
+  {
+    "userId": "019686c7-cecd-7558-8018-d55a4ac848c5",
+    "measurementType": {
+      "typeValue": 8,
+      "typeDescription": "Fat Mass Weight"
+    },
+    "attrib": 0,
+    "measurementDateTime": "2025-04-13T08:48:40.000000Z",
+    "createdDateTime": "2025-04-13T08:49:23.000000Z",
+    "modifiedDateTime": "2025-04-13T08:49:23.000000Z",
+    "measurementValue": 18.75
+  },
+  {
+    "userId": "019686c7-cecd-7558-8018-d55a4ac848c5",
+    "measurementType": {
+      "typeValue": 76,
+      "typeDescription": "Muscle Mass"
+    },
+    "attrib": 0,
+    "measurementDateTime": "2025-04-13T08:48:40.000000Z",
+    "createdDateTime": "2025-04-13T08:49:23.000000Z",
+    "modifiedDateTime": "2025-04-13T08:49:23.000000Z",
+    "measurementValue": 62.46
+  }
+]
