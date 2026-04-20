@@ -1,0 +1,111 @@
+adapter:
+  id: "app-usage-daily-v1"
+  version: "1.0.0"
+  description: "Comfortage mHealth app daily engagement metrics"
+
+match:
+  source: "app-usage"
+  record:
+    - field: "dataType"
+      equals: "app-usage-daily"
+
+defaults:
+  subject_id: { path: "userId" }
+  context:
+    source: "app-usage"
+    modality: "app"
+    device: null
+    source_measurement_type: { path: "dataType" }
+  stage: "structured"
+  source_record_id:
+    template: "app-usage:{userId}:{date}"
+
+emit:
+  - id: "exercises-completed"
+    description: "Exercise completion events"
+    type: "event"
+    category: "exercise-completed"
+    granularity: "instant"
+    iterate: "metrics.exercises.completed"
+    timestamp:
+      start: { path: "@item.completedAt" }
+    payload:
+      value:     { path: "@item.exerciseId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Exercise Completed"
+    extensions:
+      app-usage.week: { path: "@item.week" }
+      app-usage.day:  { path: "@item.day" }
+
+  - id: "recipes-favorited"
+    description: "Recipe favoriting events"
+    type: "event"
+    category: "recipe-favorited"
+    granularity: "instant"
+    iterate: "metrics.recipes.favorited"
+    timestamp:
+      start: { path: "@item.timestamp", fallback: { path: "timestamp" } }
+    payload:
+      value:     { path: "@item.recipeId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Recipe Favorited"
+
+  - id: "lessons-started"
+    description: "Educational lesson start events"
+    type: "event"
+    category: "lesson-started"
+    granularity: "instant"
+    iterate: "metrics.education.lessonsStarted"
+    timestamp:
+      start: { path: "@item.startedAt" }
+    payload:
+      value:     { path: "@item.lessonId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Lesson Started"
+
+  - id: "lessons-completed"
+    description: "Educational lesson completion events"
+    type: "event"
+    category: "lesson-completed"
+    granularity: "instant"
+    iterate: "metrics.education.lessonsCompleted"
+    timestamp:
+      start: { path: "@item.completedAt" }
+    payload:
+      value:     { path: "@item.lessonId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Lesson Completed"
+
+  - id: "profile-answers"
+    description: "Profile questionnaire answer events"
+    type: "event"
+    category: "profile-question-answered"
+    granularity: "instant"
+    iterate: "metrics.assessments.profileQuestionsAnswered"
+    timestamp:
+      start: { path: "@item.answeredAt", fallback: { path: "timestamp" } }
+    payload:
+      value:     { path: "@item.questionId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Profile Question Answered"
+    extensions:
+      app-usage.questionCategoryId: { path: "@item.questionCategoryId" }
+
+  - id: "badges-earned"
+    description: "Gamification badge unlock events"
+    type: "event"
+    category: "badge-earned"
+    granularity: "instant"
+    iterate: "metrics.gamification.badgesEarned"
+    timestamp:
+      start: { path: "@item.unlockedAt" }
+    payload:
+      value:     { path: "@item.badgeId" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     "Badge Earned"

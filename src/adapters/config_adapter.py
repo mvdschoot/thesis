@@ -85,6 +85,16 @@ def _apply_transform(value: Any, transform: str) -> Any:
     elif transform == "iso_date":
         date_part = s[:10]
         return f"{date_part}T00:00:00.000Z"
+    elif transform == "iso_millis":
+        # Normalize fractional seconds to 3 digits: "...123456Z" -> "...123Z"
+        m = re.match(r"^(.*?)(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$", s)
+        if not m:
+            return value
+        head, frac, tz = m.group(1), m.group(2) or "", m.group(3) or ""
+        if frac:
+            frac = (frac + "000")[:3]
+            return f"{head}.{frac}{tz}"
+        return f"{head}.000{tz}" if tz or "T" in head else value
     return value
 
 
@@ -118,7 +128,7 @@ def _resolve_value(
             value = _resolve_path(record, path)
 
         if value is None and "fallback" in spec:
-            value = spec["fallback"]
+            value = _resolve_value(spec["fallback"], record, item)
         if "transform" in spec:
             value = _apply_transform(value, spec["transform"])
         return value
@@ -155,6 +165,15 @@ def _resolve_value(
             return str(v) if v is not None else ""
 
         return re.sub(r"\{(.+?)\}", replacer, template)
+
+    # Lookup: map a resolved key value through a dictionary
+    if "lookup" in spec:
+        lk = spec["lookup"]
+        key_val = _resolve_value(lk["key"], record, item)
+        mapping = lk.get("map", {})
+        if key_val in mapping:
+            return mapping[key_val]
+        return lk.get("default")
 
     return None
 
@@ -349,10 +368,20 @@ class ConfigAdapter(BaseAdapter):
             ))
 
         # Build provenance
-        user_id = _resolve_value({"path": "userId"}, record) or ""
-        m_type = _resolve_value({"path": "measurementType"}, record) or ""
-        m_dt = _resolve_value({"path": "measurementDateTime"}, record) or ""
-        source_record_id = f"{ctx_source}:{user_id}:{m_type}:{m_dt}"
+        srid_spec = self._defaults.get("source_record_id")
+        if srid_spec is not None:
+            source_record_id = str(_resolve_value(srid_spec, record, item) or "")
+        else:
+            user_id = _resolve_value({"path": "userId"}, record) or ""
+            m_type = _resolve_value({"path": "measurementType"}, record) or ""
+            m_dt = _resolve_value({"path": "measurementDateTime"}, record) or ""
+            source_record_id = f"{ctx_source}:{user_id}:{m_type}:{m_dt}"
+
+        rule_type = _resolve_value(rule["type"], record, item)
+        rule_category = _resolve_value(rule["category"], record, item)
+        rule_granularity = _resolve_value(
+            rule.get("granularity", "unknown"), record, item
+        ) or "unknown"
 
         return CanonicalEvent(
             event_id=CanonicalEvent.new_id(),
@@ -360,9 +389,9 @@ class ConfigAdapter(BaseAdapter):
             timestamp=str(timestamp) if timestamp else "",
             timestamp_end=str(timestamp_end) if timestamp_end else None,
             duration_seconds=float(duration) if duration is not None else None,
-            type=EventType(rule["type"]),
-            category=rule["category"],
-            granularity=Granularity(rule.get("granularity", "unknown")),
+            type=EventType(rule_type),
+            category=str(rule_category) if rule_category is not None else "unknown",
+            granularity=Granularity(rule_granularity),
             payload=Payload(
                 value=value,
                 raw_value=raw_value,

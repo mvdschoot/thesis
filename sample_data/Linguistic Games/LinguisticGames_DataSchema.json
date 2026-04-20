@@ -1,8 +1,3 @@
-INPUT:
-{
-  "pilot": "CERTH"
-}
-OUTPUT:
 [
   {
     "username": "s1p12",
