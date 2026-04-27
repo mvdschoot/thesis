@@ -1,0 +1,76 @@
+adapter:
+  id: "linguistic-games-v1"
+  version: "1.0.0"
+  description: "Comfortage Linguistic Games aggregate per-user-per-game-per-level results"
+
+match:
+  source: "linguistic-games"
+  record:
+    - { field: "username", exists: true }
+    - { field: "results", type: "array", non_empty: true }
+
+defaults:
+  subject_id: { path: "username" }
+  context:
+    source: "linguistic-games"
+    modality: "game"
+    device: null
+    source_measurement_type: "game-result"
+  stage: "structured"
+  source_record_id:
+    template: "linguistic-games:{username}:{@item.game}:{@item.level}"
+
+emit:
+  - id: "game-result"
+    description: "Per (user, game, level) aggregate linguistic-game result"
+    type: "summary"
+    granularity: "unknown"
+    category: { path: "@item.game" }
+
+    iterate: "results"
+
+    timestamp:
+      # Source file contains no timestamps; this dataset-level default is used
+      # for every event. A SYNTHETIC_TIMESTAMP flag is attached below to make
+      # that explicit. Change this literal if the data-collection date is known.
+      start: "2025-01-01T00:00:00.000Z"
+
+    payload:
+      value:     { path: "@item.score" }
+      raw_value: { path: "@item" }
+      unit:      null
+      label:     { template: "{@item.game} level {@item.level}" }
+      components:
+        - name: "score"
+          value: { path: "@item.score" }
+        - name: "avg_score"
+          value: { path: "@item.avg_score" }
+        - name: "avg_errors"
+          value: { path: "@item.avg_errors" }
+        - name: "times_played"
+          value: { path: "@item.times_played" }
+        - name: "state"
+          value: { path: "@item.state" }
+        - name: "level"
+          value: { path: "@item.level" }
+
+    extensions:
+      linguistic-games.username: { path: "username" }
+      linguistic-games.email:    { path: "email" }
+
+    quality:
+      flags:
+        - code: "SYNTHETIC_TIMESTAMP"
+          severity: "warning"
+          stage: "structured"
+          message: "Source data has no timestamp; using config default (2025-01-01T00:00:00.000Z)"
+        - condition: { path: "@item.state", equals: "-" }
+          code: "SENTINEL_STATE"
+          severity: "info"
+          stage: "structured"
+          message: "State is the '-' sentinel meaning no categorical assessment assigned"
+        - condition: { path: "@item.state", equals: null }
+          code: "MISSING_STATE"
+          severity: "info"
+          stage: "structured"
+          message: "No state assigned (likely insufficient plays to assign a category)"

@@ -1,11 +1,6 @@
-INPUT:
-{
-  "pilot": "CERTH"
-}
-OUTPUT:
 [
   {
-    "email": "s1.p12@comfortage.net",
+    "email": "s1.p12@test.nl",
     "results": [
       {
         "startTime": 638968118982635900,
@@ -114,7 +109,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s10.p12@comfortage.net",
+    "email": "s10.p12@test.nl",
     "results": [
       {
         "startTime": 638968946925285400,
@@ -184,7 +179,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s2.p12@comfortage.net",
+    "email": "s2.p12@test.nl",
     "results": [
       {
         "startTime": 638968085518056600,
@@ -202,7 +197,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s3.p12@comfortage.net",
+    "email": "s3.p12@test.nl",
     "results": [
       {
         "startTime": 638968985767441500,
@@ -311,7 +306,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s4.p12@comfortage.net",
+    "email": "s4.p12@test.nl",
     "results": [
       {
         "startTime": 638974380644407900,
@@ -329,7 +324,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s5.p12@comfortage.net",
+    "email": "s5.p12@test.nl",
     "results": [
       {
         "startTime": 638975017578747000,
@@ -412,7 +407,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s6.p12@comfortage.net",
+    "email": "s6.p12@test.nl",
     "results": [
       {
         "startTime": 638974993541111800,
@@ -482,7 +477,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s7.p12@comfortage.net",
+    "email": "s7.p12@test.nl",
     "results": [
       {
         "startTime": 638987086932807400,
@@ -526,7 +521,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s8.p12@comfortage.net",
+    "email": "s8.p12@test.nl",
     "results": [
       {
         "startTime": 638990042231163400,
@@ -674,7 +669,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s9.p12@comfortage.net",
+    "email": "s9.p12@test.nl",
     "results": [
       {
         "startTime": 638986457737799000,
@@ -692,7 +687,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s11.p12@comfortage.net",
+    "email": "s11.p12@test.nl",
     "results": [
       {
         "startTime": 638998558835117400,
@@ -710,7 +705,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s12.p12@comfortage.net",
+    "email": "s12.p12@test.nl",
     "results": [
       {
         "startTime": 638999438828667800,
@@ -728,7 +723,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s13.p12@comfortage.net",
+    "email": "s13.p12@test.nl",
     "results": [
       {
         "startTime": 638999408465161500,
@@ -746,7 +741,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s15.p12@comfortage.net",
+    "email": "s15.p12@test.nl",
     "results": [
       {
         "startTime": 639017665264824000,
@@ -764,7 +759,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s16.p12@comfortage.net",
+    "email": "s16.p12@test.nl",
     "results": [
       {
         "startTime": 639009757638957800,
@@ -782,7 +777,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s17.p12@comfortage.net",
+    "email": "s17.p12@test.nl",
     "results": [
       {
         "startTime": 639046032260216400,
@@ -826,7 +821,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s19.p12@comfortage.net",
+    "email": "s19.p12@test.nl",
     "results": [
       {
         "startTime": 639051211156062000,
@@ -844,7 +839,7 @@ OUTPUT:
     ]
   },
   {
-    "email": "s20.p12@comfortage.net",
+    "email": "s20.p12@test.nl",
     "results": [
       {
         "startTime": 639053716092312300,

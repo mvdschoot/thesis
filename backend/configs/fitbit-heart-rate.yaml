@@ -1,0 +1,104 @@
+adapter:
+  id: "fitbit-heart-rate-v1"
+  version: "1.0.0"
+  description: "Fitbit heart rate intraday and daily summary"
+
+match:
+  source: "fitbit"
+  record:
+    - { field: "measurementType", equals: "heart-rate-intraday" }
+    - { field: "userId", exists: true }
+    - { field: "measurementDateTime", exists: true }
+    - { field: "measurementValue.activities-heart[0].value", type: "object" }
+    - { field: "measurementValue.activities-heart-intraday.dataset", type: "array" }
+
+defaults:
+  subject_id: { path: "userId" }
+  context:
+    source: "fitbit"
+    modality: "wearable"
+    device: null
+    source_measurement_type: { path: "measurementType" }
+  stage: "structured"
+
+emit:
+  # Daily resting heart rate summary
+  - id: "daily-resting-hr"
+    description: "Daily resting heart rate"
+    type: "summary"
+    category: "heart-rate"
+    granularity: "daily"
+
+    timestamp:
+      start: { path: "measurementDateTime", transform: "start_of_day" }
+      end:   { path: "measurementDateTime", transform: "end_of_day" }
+      duration_seconds: 86400
+
+    payload:
+      value:     { path: "measurementValue.activities-heart[0].value.restingHeartRate" }
+      raw_value: { path: "measurementValue.activities-heart[0].value.restingHeartRate" }
+      unit:      "bpm"
+      label:     "Resting Heart Rate"
+
+  # One event per heart rate zone
+  - id: "hr-zones"
+    description: "Heart rate zone breakdown"
+    type: "summary"
+    category: "heart-rate-zone"
+    granularity: "daily"
+    parent: "daily-resting-hr"
+
+    iterate: "measurementValue.activities-heart[0].value.heartRateZones"
+
+    timestamp:
+      start: { path: "measurementDateTime", transform: "start_of_day" }
+      end:   { path: "measurementDateTime", transform: "end_of_day" }
+      duration_seconds: 86400
+
+    payload:
+      value:     { path: "@item.minutes" }
+      raw_value: { path: "@item" }
+      unit:      "min"
+      label:     { path: "@item.name" }
+      components:
+        - name: "min"
+          value: { path: "@item.min" }
+          unit: "bpm"
+        - name: "max"
+          value: { path: "@item.max" }
+          unit: "bpm"
+        - name: "minutes"
+          value: { path: "@item.minutes" }
+          unit: "min"
+        - name: "caloriesOut"
+          value: { path: "@item.caloriesOut" }
+          unit: "kcal"
+
+  # Intraday heart rate readings
+  - id: "hr-intraday"
+    description: "Per-interval heart rate measurements"
+    type: "measurement"
+    category: "heart-rate"
+    granularity: "interval"
+    parent: "daily-resting-hr"
+
+    iterate: "measurementValue.activities-heart-intraday.dataset"
+
+    timestamp:
+      start:
+        date_from: { path: "measurementDateTime" }
+        time_from: { path: "@item.time" }
+      duration_seconds:
+        multiply:
+          - { path: "measurementValue.activities-heart-intraday.datasetInterval" }
+          - 60
+
+    payload:
+      value:     { path: "@item.value" }
+      raw_value: { path: "@item.value" }
+      unit:      "bpm"
+      label:     "Heart Rate"
+
+    extensions:
+      fitbit.datasetInterval: { path: "measurementValue.activities-heart-intraday.datasetInterval" }
+      fitbit.datasetType:     { path: "measurementValue.activities-heart-intraday.datasetType" }
