@@ -77,20 +77,29 @@ export interface ConfigMatch {
   error?: string | null;
 }
 
+export type TransformFormat = "json" | "csv";
+
 export interface TransformRequest {
   data: unknown;
   yaml: string;
   source?: string;
   device?: string;
+  format?: TransformFormat;
+}
+
+export interface TransformStats {
+  count: number;
+  subjects: string[];
+  flags: Record<string, number>;
+  severity?: Record<string, number>;
+  stages?: Record<string, number>;
+  plausibility?: Record<string, number>;
+  conformance?: Record<string, number>;
 }
 
 export interface TransformResponse {
-  events: Record<string, unknown>[];
-  stats: {
-    count: number;
-    subjects: string[];
-    flags: Record<string, number>;
-  };
+  events: import("./types").CanonicalEvent[];
+  stats: TransformStats;
 }
 
 export function generateConfig(req: GenerateConfigRequest) {

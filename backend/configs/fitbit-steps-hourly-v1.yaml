@@ -1,0 +1,40 @@
+adapter:
+  id: "fitbit-steps-hourly-v1"
+  version: "1.0.0"
+  description: "Fitbit hourly step totals mapped from CSV-style activity hour records"
+
+match:
+  source: "fitbit-watch"
+  record:
+    - { field: "Id", exists: true }
+    - { field: "ActivityHour", exists: true }
+    - { field: "StepTotal", exists: true }
+    - { field: "ActivityHour", type: "string" }
+
+defaults:
+  subject_id: { path: "Id" }
+  context:
+    source: "fitbit-watch"
+    modality: "wearable"
+    device: "fitbit"
+    source_measurement_type: "step-total-hourly"
+  stage: "structured"
+  source_record_id:
+    template: "fitbit:{Id}:{ActivityHour}"
+
+emit:
+  - id: "hourly-step-total"
+    description: "Hourly Fitbit step total measurement"
+    type: "measurement"
+    category: "steps"
+    granularity: "instant"
+    timestamp:
+      start: { path: "ActivityHour", transform: "iso_millis" }
+    payload:
+      value: { path: "StepTotal", transform: "to_int" }
+      raw_value: { path: "StepTotal" }
+      unit: "count"
+      label: "Step Total"
+    extensions:
+      fitbit.activityHour: { path: "ActivityHour" }
+      fitbit.stepTotal: { path: "StepTotal" }

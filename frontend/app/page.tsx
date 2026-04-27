@@ -1,294 +1,383 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import ConfigBrowser from "@/components/ConfigBrowser";
-import DataInput from "@/components/DataInput";
-import ResultsPanel from "@/components/ResultsPanel";
-import YamlEditor, { type SaveStatus } from "@/components/YamlEditor";
+import AdapterPanel from "@/components/adapter/AdapterPanel";
+import ConnectorPanel, { type InputMode } from "@/components/connector/ConnectorPanel";
+import PipelineNav from "@/components/PipelineNav";
+import ResultsPanel from "@/components/results/ResultsPanel";
+import StageRulesPanel from "@/components/StageRulesPanel";
+import StageStrip, { type StageDef } from "@/components/StageStrip";
+import Topbar from "@/components/Topbar";
 import {
-  generateConfig,
   getConfig,
+  listConfigs,
   transform,
-  updateConfig,
+  type TransformFormat,
   type TransformResponse,
 } from "@/lib/api";
+import { CLEANER_RULES, QUALIFIER_RULES, VALIDATOR_RULES } from "@/lib/rules";
+import { SAMPLE_CONFIGS, SAMPLE_DATASETS, SIMULATED_EVENTS } from "@/lib/sampleData";
+import type { AdapterConfig, CanonicalEvent } from "@/lib/types";
+import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
 
-type Mode = "generate" | "existing";
+const SAMPLE_CONFIG_KEYS = Object.keys(SAMPLE_CONFIGS);
 
-const AUTOSAVE_DEBOUNCE_MS = 600;
+const SAMPLE_RAW = { value: " 244 ", unit: null, timestamp: "2025-01-12T06:04:00Z", category: "heart-rate" };
+const SAMPLE_CLEANED = { value: 244, unit: "bpm", timestamp: "2025-01-12T06:04:00.000Z", category: "heart-rate" };
+const SAMPLE_VALIDATED = { ...SAMPLE_CLEANED, _flags: ["HR_OUT_OF_RANGE"] };
+const SAMPLE_QUALIFIED = {
+  ...SAMPLE_CLEANED,
+  plausibility: "review",
+  completeness: 1.0,
+};
 
 export default function Page() {
-  const [data, setData] = useState<unknown | null>(null);
-  const [description, setDescription] = useState("");
-  const [hints, setHints] = useState("");
-  const [source, setSource] = useState("");
+  // Connector state
+  const [inputMode, setInputMode] = useState<InputMode>("sample");
+  const [datasetKey, setDatasetKey] = useState<string>(Object.keys(SAMPLE_DATASETS)[0]);
+  const [customText, setCustomText] = useState<string>("");
+  const [customFormat, setCustomFormat] = useState<TransformFormat>("json");
+  const [customSource, setCustomSource] = useState<string>("");
+  const [customError, setCustomError] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<Mode>("generate");
-  const [yaml, setYaml] = useState("");
-  const [configId, setConfigId] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [browserRefresh, setBrowserRefresh] = useState(0);
+  // Adapter state — backend configs override the seeded SAMPLE_CONFIGS where available.
+  const [configMap, setConfigMap] = useState<Record<string, AdapterConfig>>({ ...SAMPLE_CONFIGS });
+  const [configKey, setConfigKey] = useState<string>(SAMPLE_CONFIG_KEYS[0] ?? "");
+  const [backendIds, setBackendIds] = useState<string[]>([]);
+  const [adapterLoading, setAdapterLoading] = useState(false);
+  const [adapterError, setAdapterError] = useState<string | null>(null);
 
-  const [result, setResult] = useState<TransformResponse | null>(null);
+  // Stage navigation
+  const [activeStage, setActiveStage] = useState<string>("connector");
 
-  const [generating, setGenerating] = useState(false);
+  // Rule visualization (per-stage toggles — currently cosmetic)
+  const [cleanerRules, setCleanerRules] = useState(CLEANER_RULES);
+  const [validatorRules, setValidatorRules] = useState(VALIDATOR_RULES);
+  const [qualifierRules, setQualifierRules] = useState(QUALIFIER_RULES);
+
+  // Run state
+  const [runResult, setRunResult] = useState<TransformResponse | null>(null);
   const [running, setRunning] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
 
-  // Autosave: debounce PUT when yaml changes and configId is set.
-  const yamlRef = useRef(yaml);
-  const configIdRef = useRef(configId);
-  const lastSavedRef = useRef<string>("");
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  // ── Load backend config list once on mount. Each id loads on first selection.
   useEffect(() => {
-    yamlRef.current = yaml;
-  }, [yaml]);
-
-  useEffect(() => {
-    configIdRef.current = configId;
-  }, [configId]);
-
-  const flushSave = useCallback(async () => {
-    const id = configIdRef.current;
-    const current = yamlRef.current;
-    if (!id) return;
-    if (current === lastSavedRef.current) return;
-    setSaveStatus("saving");
-    setSaveError(null);
-    try {
-      const saved = await updateConfig(id, current);
-      lastSavedRef.current = saved.yaml;
-      if (yamlRef.current === saved.yaml) {
-        setSaveStatus("saved");
-      } else {
-        // User typed while we were saving — keep dirty and schedule another save.
-        setSaveStatus("dirty");
-        scheduleSave();
-      }
-    } catch (e) {
-      setSaveStatus("error");
-      setSaveError((e as Error).message);
-    }
+    let cancelled = false;
+    listConfigs()
+      .then((list) => {
+        if (cancelled) return;
+        const ids = list.map((c) => c.id);
+        setBackendIds(ids);
+        if (ids.length > 0 && !ids.includes(configKey)) {
+          setConfigKey(ids[0]);
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — fall back silently to SAMPLE_CONFIGS.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const scheduleSave = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      void flushSave();
-    }, AUTOSAVE_DEBOUNCE_MS);
-  }, [flushSave]);
-
-  function handleYamlChange(next: string) {
-    setYaml(next);
-    if (configId && next !== lastSavedRef.current) {
-      setSaveStatus("dirty");
-      scheduleSave();
-    }
-  }
-
-  async function handleGenerate() {
-    if (!data) {
-      setGenerateError("Load some data first.");
-      return;
-    }
-    if (!description.trim()) {
-      setGenerateError("Add a description so the LLM knows what this data is.");
-      return;
-    }
-    setGenerateError(null);
-    setGenerating(true);
-    try {
-      const res = await generateConfig({
-        data,
-        description,
-        hints: hints || undefined,
-        source: source || undefined,
+  // ── Lazy-load YAML for a backend config when it's selected.
+  useEffect(() => {
+    if (!configKey) return;
+    if (configMap[configKey]) return;
+    if (!backendIds.includes(configKey)) return;
+    let cancelled = false;
+    setAdapterLoading(true);
+    setAdapterError(null);
+    getConfig(configKey)
+      .then((payload) => {
+        if (cancelled) return;
+        try {
+          const parsed = parseAdapterYaml(payload.yaml);
+          setConfigMap((m) => ({ ...m, [configKey]: parsed }));
+        } catch (e) {
+          setAdapterError((e as Error).message);
+        }
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setAdapterError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setAdapterLoading(false);
       });
-      setYaml(res.yaml);
-      setConfigId(res.id);
-      lastSavedRef.current = res.yaml;
-      setSaveStatus("saved");
-      setSaveError(null);
-      setBrowserRefresh((n) => n + 1);
-    } catch (e) {
-      setGenerateError((e as Error).message);
-    } finally {
-      setGenerating(false);
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [configKey, configMap, backendIds]);
 
-  async function handleSelectExisting(id: string) {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
+  const config: AdapterConfig | null = configMap[configKey] ?? null;
+
+  const setConfig = (next: AdapterConfig) => {
+    setConfigMap((m) => ({ ...m, [configKey]: next }));
+  };
+
+  const onLLMResult = (yamlText: string, configId: string) => {
+    try {
+      const parsed = parseAdapterYaml(yamlText);
+      setConfigMap((m) => ({ ...m, [configId]: parsed }));
+      setBackendIds((ids) => (ids.includes(configId) ? ids : [...ids, configId]));
+      setConfigKey(configId);
+    } catch (e) {
+      setAdapterError((e as Error).message);
+    }
+  };
+
+  // The active payload format. Sample datasets are always JSON.
+  const activeFormat: TransformFormat = inputMode === "sample" ? "json" : customFormat;
+
+  // ── Resolve the input data for transform.
+  // For JSON: parsed object/array. For CSV: raw text passed through to the backend.
+  const inputData: unknown | null = useMemo(() => {
+    if (inputMode === "sample") {
+      return SAMPLE_DATASETS[datasetKey]?.record ?? null;
+    }
+    if (!customText.trim()) return null;
+    if (customFormat === "csv") return customText;
+    try {
+      return JSON.parse(customText) as unknown;
+    } catch {
+      return null;
+    }
+  }, [inputMode, datasetKey, customText, customFormat]);
+
+  // Validate custom payload for user feedback (non-blocking).
+  useEffect(() => {
+    if (inputMode !== "custom" || !customText.trim()) {
+      setCustomError(null);
+      return;
+    }
+    if (customFormat === "csv") {
+      // Minimal sanity check: at least one newline-separated row of fields.
+      const firstLine = customText.split(/\r?\n/, 1)[0] ?? "";
+      if (!firstLine.includes(",")) {
+        setCustomError("CSV looks malformed: no comma found in the header row.");
+      } else {
+        setCustomError(null);
+      }
+      return;
     }
     try {
-      const cfg = await getConfig(id);
-      setYaml(cfg.yaml);
-      setConfigId(cfg.id);
-      lastSavedRef.current = cfg.yaml;
-      setSaveStatus("saved");
-      setSaveError(null);
+      JSON.parse(customText);
+      setCustomError(null);
     } catch (e) {
-      setSaveStatus("error");
-      setSaveError((e as Error).message);
+      setCustomError(`Invalid JSON: ${(e as Error).message}`);
     }
-  }
+  }, [customText, inputMode, customFormat]);
+
+  // Source name describes the *data*, not the adapter. In sample mode it comes
+  // from the fixture; in custom mode the user owns it. Don't fall back to the
+  // currently-selected adapter's source — that's how an unrelated adapter's
+  // `match.source` (e.g. "app-usage") leaks into transform requests and into
+  // LLM-generated configs for other data.
+  const sourceName = useMemo(() => {
+    if (inputMode === "sample") return SAMPLE_DATASETS[datasetKey]?.source ?? "";
+    return customSource.trim();
+  }, [inputMode, datasetKey, customSource]);
+
+  const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
+  const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
+
+  const stageDefs: StageDef[] = useMemo(() => {
+    const total = events.length;
+    const warn = events.reduce(
+      (s, e) => s + e.quality.flags.filter((f) => f.severity === "warning").length,
+      0,
+    );
+    const err = events.reduce(
+      (s, e) => s + e.quality.flags.filter((f) => f.severity === "error").length,
+      0,
+    );
+    const emitCount = config?.emit.length ?? 0;
+    // Strip stays at 5 stages to match the CSS grid (Results is reached via prev/next nav).
+    return [
+      {
+        id: "connector",
+        label: "Connector",
+        count: 1,
+        note: "1 record · sample",
+        done: activeStage !== "connector",
+        pulse: activeStage === "connector",
+      },
+      {
+        id: "adapter",
+        label: "Adapter",
+        count: total,
+        note: `${emitCount} emit rules`,
+        done: ["cleaning", "validation", "qualification", "results"].includes(activeStage),
+        pulse: activeStage === "adapter",
+      },
+      {
+        id: "cleaning",
+        label: "Cleaner",
+        count: total,
+        note: `${cleanerRules.filter((r) => r.on).length}/${cleanerRules.length} rules on`,
+        done: ["validation", "qualification", "results"].includes(activeStage),
+        pulse: activeStage === "cleaning",
+      },
+      {
+        id: "validation",
+        label: "Validator",
+        count: total,
+        note: `${validatorRules.filter((r) => r.on).length}/${validatorRules.length} rules on`,
+        warn,
+        done: ["qualification", "results"].includes(activeStage),
+        pulse: activeStage === "validation",
+      },
+      {
+        id: "qualification",
+        label: "Qualifier",
+        count: total,
+        note: `${qualifierRules.filter((r) => r.on).length}/${qualifierRules.length} rules on`,
+        warn,
+        err,
+        done: activeStage === "results",
+        pulse: activeStage === "qualification",
+      },
+    ];
+  }, [events, activeStage, config, cleanerRules, validatorRules, qualifierRules]);
+
+  const canRun = inputData != null && config != null;
 
   async function handleRun() {
-    if (!data) {
-      setRunError("Load some data first.");
+    if (!canRun || !config) {
+      setRunError("Need both input data and an adapter config before running.");
       return;
-    }
-    if (!yaml.trim()) {
-      setRunError("Generate or select a YAML config first.");
-      return;
-    }
-    // Make sure the latest edits are on the server before running.
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-      await flushSave();
     }
     setRunError(null);
     setRunning(true);
     try {
+      const yamlText = dumpAdapterYaml(config);
       const res = await transform({
-        data,
-        yaml,
-        source: source || undefined,
+        data: inputData,
+        yaml: yamlText,
+        source: sourceName || undefined,
+        format: activeFormat,
       });
-      setResult(res);
+      setRunResult(res);
+      setActiveStage("results");
     } catch (e) {
       setRunError((e as Error).message);
-      setResult(null);
     } finally {
       setRunning(false);
     }
   }
 
+  const configIds = useMemo(() => {
+    const merged = new Set<string>([...SAMPLE_CONFIG_KEYS, ...backendIds]);
+    return Array.from(merged);
+  }, [backendIds]);
+
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-8">
-      <header>
-        <h1 className="text-2xl font-bold">Progressive Harmonization ETL</h1>
-        <p className="text-sm text-gray-600">
-          Upload source data, then either generate a new YAML config via the
-          LLM or pick an existing one. Edits are persisted automatically.
-        </p>
-      </header>
+    <div className="app">
+      <Topbar onRun={handleRun} running={running} canRun={canRun} />
+      <StageStrip stages={stageDefs} active={activeStage} onJump={setActiveStage} />
 
-      <DataInput data={data} onChange={setData} />
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">2. Source (optional)</h2>
-        <label className="block text-sm font-medium">Source name</label>
-        <input
-          type="text"
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          placeholder="e.g. withings, linguistic-games"
-          className="w-full rounded border p-2 text-sm"
-        />
-        <p className="text-xs text-gray-500">
-          Used to filter matching configs and to stamp transformed events. Can
-          be left blank while browsing.
-        </p>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">3. Choose a config</h2>
-        <div className="flex gap-2 border-b">
-          {(["generate", "existing"] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`px-3 py-1 text-sm ${
-                mode === m ? "border-b-2 border-black font-medium" : "text-gray-500"
-              }`}
-            >
-              {m === "generate" ? "Generate new" : "Use existing"}
-            </button>
-          ))}
-        </div>
-
-        {mode === "generate" ? (
-          <div className="space-y-3">
-            <label className="block text-sm font-medium">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              placeholder="What does each record represent? Which field identifies the subject? Any quirks (missing timestamps, embedded arrays, sentinels)?"
-              className="w-full rounded border p-2 text-sm"
-            />
-            <label className="block text-sm font-medium">Extra hints (optional)</label>
-            <textarea
-              value={hints}
-              onChange={(e) => setHints(e.target.value)}
-              rows={2}
-              placeholder="e.g. 'the score field is the best-play score, not cumulative'"
-              className="w-full rounded border p-2 text-sm"
-            />
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-            >
-              {generating ? "Generating…" : "Generate config"}
-            </button>
-            {generateError && (
-              <p className="rounded bg-red-50 p-2 text-sm text-red-700">
-                {generateError}
-              </p>
-            )}
+      <div className="main">
+        {runError && (
+          <div className="qflag err" style={{ marginBottom: 18 }}>
+            <div className="qf-bar" />
+            <div>
+              <div className="qf-code">RUN_FAILED</div>
+              <div className="qf-msg">{runError}</div>
+            </div>
           </div>
-        ) : (
-          <ConfigBrowser
-            data={data}
-            source={source}
-            selectedId={configId}
-            onSelect={handleSelectExisting}
-            refreshKey={browserRefresh}
+        )}
+
+        {activeStage === "connector" && (
+          <ConnectorPanel
+            mode={inputMode}
+            setMode={setInputMode}
+            datasetKey={datasetKey}
+            setDatasetKey={setDatasetKey}
+            customText={customText}
+            setCustomText={setCustomText}
+            customFormat={customFormat}
+            setCustomFormat={setCustomFormat}
+            customSource={customSource}
+            setCustomSource={setCustomSource}
+            customError={customError}
           />
         )}
-      </section>
 
-      {yaml && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">
-            4. Review / edit YAML
-            {configId && (
-              <span className="ml-2 font-mono text-sm text-gray-500">
-                ({configId})
-              </span>
-            )}
-          </h2>
-          <YamlEditor
-            value={yaml}
-            onChange={handleYamlChange}
-            status={saveStatus}
-            statusMessage={saveError ?? undefined}
+        {activeStage === "adapter" && (
+          <AdapterPanel
+            config={config}
+            onChange={setConfig}
+            configKey={configKey}
+            setConfigKey={setConfigKey}
+            configIds={configIds}
+            inputData={inputData}
+            source={sourceName}
+            onLLMResult={onLLMResult}
+            loading={adapterLoading}
+            loadError={adapterError}
           />
-          <button
-            onClick={handleRun}
-            disabled={running}
-            className="rounded bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            {running ? "Running…" : "Run transformation"}
-          </button>
-          {runError && (
-            <p className="rounded bg-red-50 p-2 text-sm text-red-700">
-              {runError}
-            </p>
-          )}
-        </section>
-      )}
+        )}
 
-      <ResultsPanel result={result} yaml={yaml} />
-    </main>
+        {activeStage === "cleaning" && (
+          <StageRulesPanel
+            title="Cleaner"
+            eyebrow="Stage 03 · Heuristic cleaning"
+            blurb="Whitespace strip → Timestamp normalize → Type coerce → Unit infer. Each heuristic mutates the event in place; fail-soft, no flags raised. Stage advances to CLEANED."
+            rules={cleanerRules}
+            setRules={setCleanerRules}
+            sample={SAMPLE_RAW}
+            sampleAfter={SAMPLE_CLEANED}
+          />
+        )}
+
+        {activeStage === "validation" && (
+          <StageRulesPanel
+            title="Validator"
+            eyebrow="Stage 04 · Assertions only"
+            blurb="Validators ASSERT — they never mutate. Each returns a list of QualityFlags; the runner appends and de-dups against adapter-declared flags. Failed validation events are tagged, not dropped."
+            rules={validatorRules}
+            setRules={setValidatorRules}
+            sample={SAMPLE_CLEANED}
+            sampleAfter={SAMPLE_VALIDATED}
+            sampleFlags={[
+              {
+                code: "HR_OUT_OF_RANGE",
+                severity: "warning",
+                stage: "validated",
+                message: "value 244 outside [25, 230] for heart-rate",
+              },
+            ]}
+          />
+        )}
+
+        {activeStage === "qualification" && (
+          <StageRulesPanel
+            title="Qualifier"
+            eyebrow="Stage 05 · Cross-event quality"
+            blurb="Operates over the request's events as a batch. Computes completeness, fingerprints duplicates, and runs Hampel outlier (median ± 3.5·MAD per (subject_id, category), min n=5). Derives conformance + plausibility."
+            rules={qualifierRules}
+            setRules={setQualifierRules}
+            sample={SAMPLE_VALIDATED}
+            sampleAfter={SAMPLE_QUALIFIED}
+            sampleFlags={[
+              {
+                code: "HAMPEL_OUTLIER",
+                severity: "warning",
+                stage: "qualified",
+                message: "Hampel: |x − median| > 3.5·MAD for (u-08431, heart-rate)",
+              },
+            ]}
+          />
+        )}
+
+        {activeStage === "results" && (
+          <ResultsPanel events={events} source={eventSource} />
+        )}
+
+        <PipelineNav activeStage={activeStage} onJump={setActiveStage} />
+      </div>
+    </div>
   );
 }

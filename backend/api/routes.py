@@ -5,7 +5,7 @@ import logging
 import tempfile
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -18,7 +18,8 @@ from api.llm.langchain_client import LangChainClient
 from api.prompts import build_system_prompt, build_user_prompt, strip_code_fence
 from src.adapters.config_adapter import ConfigAdapter
 from src.adapters.registry import AdapterRegistry
-from src.connectors.base import SourceMetadata
+from src.connectors.base import BaseConnector, SourceMetadata
+from src.connectors.csv_connector import CsvConnector
 from src.connectors.json_connector import JsonConnector
 from src.pipeline import Pipeline
 from src.qualification.qualifier import Qualifier
@@ -90,6 +91,7 @@ class TransformRequest(BaseModel):
     yaml: str = Field(..., description="The YAML config to run against the data")
     source: str | None = None
     device: str | None = None
+    format: Literal["json", "csv"] = "json"
 
 
 class TransformResponse(BaseModel):
@@ -259,16 +261,30 @@ def transform(req: TransformRequest) -> TransformResponse:
     source_name = req.source or config.get("match", {}).get("source", "")
     metadata = SourceMetadata(
         source_name=source_name,
-        format="json",
+        format=req.format,
         device=req.device,
     )
-    connector = JsonConnector(metadata)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, encoding="utf-8"
-    ) as tmp:
-        json.dump(req.data, tmp)
-        tmp_path = Path(tmp.name)
+    connector: BaseConnector
+    if req.format == "csv":
+        if not isinstance(req.data, str):
+            raise HTTPException(
+                status_code=400,
+                detail="format='csv' requires `data` to be the raw CSV text as a string.",
+            )
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8", newline=""
+        ) as tmp:
+            tmp.write(req.data)
+            tmp_path = Path(tmp.name)
+        connector = CsvConnector(metadata)
+    else:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tmp:
+            json.dump(req.data, tmp)
+            tmp_path = Path(tmp.name)
+        connector = JsonConnector(metadata)
 
     rules = _load_quality_rules_safe()
 
