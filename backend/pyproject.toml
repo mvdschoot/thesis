@@ -1,13 +1,14 @@
 [project]
 name = "ph-etl-backend"
-version = "0.1.0"
-description = "Progressive Harmonization ETL backend (FastAPI + config-driven adapter)"
+version = "0.2.0"
+description = "Progressive Harmonization ETL backend (FastAPI + Kafka-decomposed pipeline)"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
   "pydantic>=2.7",
   "pyyaml>=6.0",
+  "aiokafka>=0.11",
   "langchain>=0.3",
   "langchain-core>=0.3",
   "langchain-anthropic>=0.3",
@@ -23,4 +24,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["src", "src.adapters", "src.connectors", "src.heuristics", "src.models", "api", "api.llm"]
+packages = [
+  "shared",
+  "services",
+  "services.gateway",
+  "services.gateway.llm",
+  "services.connector",
+  "services.adapter",
+  "services.cleaner",
+  "services.validator",
+  "services.qualifier",
+]
