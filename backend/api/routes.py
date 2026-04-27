@@ -21,9 +21,25 @@ from src.adapters.registry import AdapterRegistry
 from src.connectors.base import SourceMetadata
 from src.connectors.json_connector import JsonConnector
 from src.pipeline import Pipeline
+from src.qualification.qualifier import Qualifier
+from src.validation.runner import ValidationRunner, load_quality_rules
 
 router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
+
+# backend/api/routes.py -> backend/configs/quality_rules.yaml
+_QUALITY_RULES_PATH = Path(__file__).resolve().parent.parent / "configs" / "quality_rules.yaml"
+
+
+def _load_quality_rules_safe() -> dict:
+    try:
+        return load_quality_rules(_QUALITY_RULES_PATH)
+    except FileNotFoundError:
+        logger.warning("Quality rules file not found at %s", _QUALITY_RULES_PATH)
+        return {}
+    except Exception as e:  # pragma: no cover — defensive
+        logger.exception("Failed to load quality rules: %s", e)
+        return {}
 
 
 def _get_llm_client() -> LLMClient:
@@ -254,8 +270,15 @@ def transform(req: TransformRequest) -> TransformResponse:
         json.dump(req.data, tmp)
         tmp_path = Path(tmp.name)
 
+    rules = _load_quality_rules_safe()
+
     try:
-        pipeline = Pipeline(connector, registry)
+        pipeline = Pipeline(
+            connector,
+            registry,
+            validator=ValidationRunner(rules=rules),
+            qualifier=Qualifier(rules=rules),
+        )
         events = pipeline.run(tmp_path)
     except Exception as e:
         logger.exception("Pipeline failed")
@@ -269,17 +292,34 @@ def transform(req: TransformRequest) -> TransformResponse:
     event_dicts = [e.to_dict() for e in events]
 
     flag_counter: Counter[str] = Counter()
+    severity_counter: Counter[str] = Counter()
+    stage_counter: Counter[str] = Counter()
+    plausibility_counter: Counter[str] = Counter()
+    conformance_counter: Counter[str] = Counter()
     subjects: set[str] = set()
     for ev in event_dicts:
         subjects.add(ev.get("subject_id", ""))
-        for f in (ev.get("quality") or {}).get("flags", []) or []:
+        stage_counter[ev.get("stage", "unknown")] += 1
+        quality = ev.get("quality") or {}
+        if quality.get("plausibility"):
+            plausibility_counter[quality["plausibility"]] += 1
+        if quality.get("conformance"):
+            conformance_counter[quality["conformance"]] += 1
+        for f in quality.get("flags", []) or []:
             code = f.get("code")
             if code:
                 flag_counter[code] += 1
+            severity = f.get("severity")
+            if severity:
+                severity_counter[severity] += 1
 
     stats = {
         "count": len(event_dicts),
         "subjects": sorted(s for s in subjects if s),
         "flags": dict(flag_counter),
+        "severity": dict(severity_counter),
+        "stages": dict(stage_counter),
+        "plausibility": dict(plausibility_counter),
+        "conformance": dict(conformance_counter),
     }
     return TransformResponse(events=event_dicts, stats=stats)

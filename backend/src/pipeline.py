@@ -2,38 +2,41 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from .adapters.registry import AdapterRegistry
+from .cleaning.cleaner import Cleaner
 from .connectors.base import BaseConnector
-from .heuristics.base import HeuristicChain
 from .models.canonical import CanonicalEvent
+from .qualification.qualifier import Qualifier
+from .validation.runner import ValidationRunner
 
 logger = logging.getLogger(__name__)
 
 
 class Pipeline:
-    """Orchestrates the ingestion pipeline: connector -> adapter -> heuristics.
+    """Orchestrates the ingestion pipeline:
+    connector -> adapter -> cleaner -> validator -> qualifier.
 
-    Reads data via a connector, looks up the appropriate adapter for each
-    record, transforms to canonical events, and applies heuristics.
+    Each post-adapter stage advances the event's `stage` field, leaving an
+    audit trail of QualityFlags. Failed-validation events are kept and tagged
+    (`quality.plausibility="exclude"`) so consumers choose their own filter.
     """
 
     def __init__(
         self,
         connector: BaseConnector,
         registry: AdapterRegistry,
-        heuristics: HeuristicChain | None = None,
+        cleaner: Cleaner | None = None,
+        validator: ValidationRunner | None = None,
+        qualifier: Qualifier | None = None,
     ) -> None:
         self.connector = connector
         self.registry = registry
-        self.heuristics = heuristics or HeuristicChain()
+        self.cleaner = cleaner or Cleaner()
+        self.validator = validator or ValidationRunner()
+        self.qualifier = qualifier or Qualifier()
 
     def run(self, path: str | Path) -> list[CanonicalEvent]:
-        """Run the pipeline on the given input path.
-
-        Returns all canonical events produced.
-        """
         path = Path(path)
         all_events: list[CanonicalEvent] = []
         skipped = 0
@@ -48,9 +51,11 @@ class Pipeline:
                 skipped += 1
                 continue
 
-            events = adapter.transform(metadata, record)
-            # events = self.heuristics.apply_all(events)
-            all_events.extend(events)
+            all_events.extend(adapter.transform(metadata, record))
+
+        all_events = self.cleaner.apply_all(all_events)
+        all_events = self.validator.apply_all(all_events)
+        all_events = self.qualifier.apply_all(all_events)
 
         logger.info(
             "Pipeline complete: %d events produced, %d records skipped",

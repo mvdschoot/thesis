@@ -1,1 +1,0 @@
-[Swagger UI](https://api.dev.onmi.design/)

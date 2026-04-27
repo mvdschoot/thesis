@@ -49,7 +49,7 @@ class UnitInferrer(BaseHeuristic):
                 QualityFlag(
                     code="UNIT_INFERRED",
                     severity=Severity.INFO,
-                    stage="structured",
+                    stage="cleaned",
                     message=f"Unit '{inferred}' inferred from ({key[0]}, {key[1]})",
                 )
             )

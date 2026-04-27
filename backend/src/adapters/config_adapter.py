@@ -418,6 +418,15 @@ class ConfigAdapter(BaseAdapter):
             for key, val_spec in ext_spec.items():
                 extensions[key] = _resolve_value(val_spec, record, item)
 
+        # Per-rule quality overrides — passed through extensions for the
+        # downstream validator/qualifier to consume. Stripped from the
+        # user-facing JSON in CanonicalEvent.to_dict().
+        quality_overrides = rule.get("quality_overrides")
+        if quality_overrides:
+            if extensions is None:
+                extensions = {}
+            extensions["_quality_override"] = quality_overrides
+
         # Resolve quality flags
         quality_flags: list[QualityFlag] = []
         q_spec = rule.get("quality", {})

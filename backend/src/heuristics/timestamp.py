@@ -40,7 +40,7 @@ class TimestampNormalizer(BaseHeuristic):
                 QualityFlag(
                     code="TIMEZONE_ASSUMED_UTC",
                     severity=Severity.INFO,
-                    stage="structured",
+                    stage="cleaned",
                     message=f"{field}: appended Z to timestamp without timezone",
                 )
             )
@@ -52,7 +52,7 @@ class TimestampNormalizer(BaseHeuristic):
                 QualityFlag(
                     code="DATE_ONLY_TIMESTAMP",
                     severity=Severity.INFO,
-                    stage="structured",
+                    stage="cleaned",
                     message=f"{field}: expanded date-only to start of day",
                 )
             )

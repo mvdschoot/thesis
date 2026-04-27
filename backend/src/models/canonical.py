@@ -170,14 +170,20 @@ class QualityFlag:
 @dataclass
 class Quality:
     flags: list[QualityFlag] = field(default_factory=list)
+    conformance: str | None = None
     completeness: float | None = None
     plausibility: str | None = None
+    expected_field_count: int | None = None
+    present_field_count: int | None = None
 
     def to_dict(self) -> dict:
         return {
             "flags": [f.to_dict() for f in self.flags],
+            "conformance": self.conformance,
             "completeness": self.completeness,
             "plausibility": self.plausibility,
+            "expected_field_count": self.expected_field_count,
+            "present_field_count": self.present_field_count,
         }
 
 
@@ -200,6 +206,16 @@ class CanonicalEvent:
     extensions: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
+        # Strip internal extension keys (leading underscore) — they're plumbing
+        # for cross-stage hand-off (e.g., "_quality_override") and not part of
+        # the user-facing canonical event.
+        public_extensions: dict[str, Any] | None
+        if self.extensions is None:
+            public_extensions = None
+        else:
+            public_extensions = {
+                k: v for k, v in self.extensions.items() if not str(k).startswith("_")
+            } or None
         return {
             "event_id": self.event_id,
             "subject_id": self.subject_id,
@@ -215,8 +231,11 @@ class CanonicalEvent:
             "mapping": self.mapping.to_dict(),
             "quality": self.quality.to_dict(),
             "stage": self.stage.value,
-            "extensions": self.extensions,
+            "extensions": public_extensions,
         }
+
+    def has_severity(self, severity: Severity) -> bool:
+        return any(f.severity == severity for f in self.quality.flags)
 
     @staticmethod
     def new_id() -> str:
