@@ -18,7 +18,7 @@ COPY pyproject.toml ./
 RUN pip install --upgrade pip && pip install \
     "fastapi>=0.115" "uvicorn[standard]>=0.32" "pydantic>=2.7" "pyyaml>=6.0" \
     "aiokafka>=0.11" \
-    "langchain>=0.3" "langchain-core>=0.3" "langchain-anthropic>=0.3" \
+    "langchain>=0.3" "langchain-core>=0.3" "langchain-anthropic>=0.3" "langchain-openai" \
     "python-multipart>=0.0.12"
 
 # Project source.
