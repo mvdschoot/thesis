@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from shared.models import CanonicalEvent
+from domain.models import CanonicalEvent
 
 
 class BaseHeuristic(ABC):

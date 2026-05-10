@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shared.models import CanonicalEvent, QualityFlag, Severity
+from domain.models import CanonicalEvent, QualityFlag, Severity
 
 from .base import BaseHeuristic
 

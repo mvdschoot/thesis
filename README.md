@@ -16,10 +16,11 @@ No data is persisted server-side. Each request is stateless.
 
 ```
 impl/
-  backend/          FastAPI + config-driven adapter engine
-    api/            HTTP handlers and LLM clients
-    src/            canonical model, pipeline, connectors, adapters
-    configs/        example YAML configs (used as LLM few-shot corpus)
+  backend/          FastAPI single-service ETL
+    api/            HTTP handlers, Pydantic models, LLM client, config CRUD
+    pipeline/       five in-process stages (connector → adapter → cleaner → validator → qualifier)
+    domain/         canonical event model, quality rules, value-level utils
+    configs/        adapter YAML configs (also the LLM few-shot corpus)
     pyproject.toml
   frontend/         Next.js (client-only, output: export) + Monaco editor
   sample_data/      test fixtures

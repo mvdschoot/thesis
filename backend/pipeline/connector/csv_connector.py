@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 from typing import Any, Iterator
 
-from shared.models import SourceMetadata
+from domain.models import SourceMetadata
 
 from .base import BaseConnector
 

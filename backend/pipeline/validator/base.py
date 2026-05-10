@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from shared.models import CanonicalEvent, QualityFlag
+from domain.models import CanonicalEvent, QualityFlag
 
 
 class BaseValidator(ABC):

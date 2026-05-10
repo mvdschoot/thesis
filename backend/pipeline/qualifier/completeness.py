@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from shared.models import CanonicalEvent
+from domain.models import CanonicalEvent
 
 # Default expected fields when no per-category schema is declared.
 _DEFAULT_EXPECTED = ["subject_id", "timestamp", "payload.value"]

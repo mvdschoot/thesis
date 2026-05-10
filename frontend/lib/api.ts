@@ -122,6 +122,6 @@ export function updateConfig(id: string, yaml: string) {
   return put<ConfigPayload>(`/api/configs/${encodeURIComponent(id)}`, { yaml });
 }
 
-export function matchConfigs(data: unknown, source?: string) {
-  return post<ConfigMatch[]>("/api/configs/match", { data, source });
+export function matchConfigs(data: string, format: TransformFormat, source?: string) {
+  return post<ConfigMatch[]>("/api/configs/match", { data, format, source });
 }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shared.models import CanonicalEvent
+from domain.models import CanonicalEvent
 
 from .base import BaseHeuristic
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from shared.coerce import try_coerce_numeric
-from shared.models import CanonicalEvent, QualityFlag, Severity
+from domain.coerce import try_coerce_numeric
+from domain.models import CanonicalEvent, QualityFlag, Severity
 
 from .base import BaseHeuristic
 

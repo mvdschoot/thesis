@@ -151,6 +151,13 @@ export default function Page() {
     }
   }, [inputMode, datasetKey, customText, customFormat]);
 
+  // String form of inputData for endpoints that parse server-side (e.g. /configs/match).
+  const inputDataString: string | null = useMemo(() => {
+    if (inputData == null) return null;
+    if (typeof inputData === "string") return inputData;
+    return JSON.stringify(inputData);
+  }, [inputData]);
+
   // Validate custom payload for user feedback (non-blocking).
   useEffect(() => {
     if (inputMode !== "custom" || !customText.trim()) {
@@ -190,13 +197,13 @@ export default function Page() {
   // hide the panel rather than surface noise — same forgiving pattern as
   // listConfigs above.
   useEffect(() => {
-    if (inputData == null) {
+    if (inputDataString == null) {
       setConfigMatches(null);
       return;
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      matchConfigs(inputData, sourceName || undefined)
+      matchConfigs(inputDataString, activeFormat, sourceName || undefined)
         .then((res) => {
           if (!cancelled) setConfigMatches(res);
         })
@@ -208,7 +215,7 @@ export default function Page() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [inputData, sourceName]);
+  }, [inputDataString, activeFormat, sourceName]);
 
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";

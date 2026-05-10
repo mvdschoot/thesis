@@ -8,45 +8,67 @@ A thesis-grade ETL web app that turns heterogeneous health/behavioural data (Fit
 
 ## Architecture at a glance
 
+Single FastAPI process. Three flat tiers — `api/` (HTTP), `pipeline/` (the five harmonization stages, in-process), `domain/` (value objects). No Kafka, no worker glue, no message broker. F5 the launch config and breakpoints in any stage fire on the next request.
+
 ```
 impl/
-  backend/        FastAPI + config-driven adapter engine (Python ≥ 3.11)
-    api/          HTTP routes, LLM client, prompt templates
-    src/          domain code (see below)
-    configs/      YAML adapter configs (also the LLM few-shot corpus)
-                  + quality_rules.yaml (canonical category quality rules)
+  backend/        FastAPI single-service ETL (Python ≥ 3.11)
+    api/          HTTP layer
+      main.py     FastAPI app + CORS
+      routes.py   handlers; /api/transform calls run_pipeline directly
+      models.py   Pydantic request/response schemas
+      configs_store.py    YAML config CRUD on backend/configs/existing_configs/
+      prompts.py          LLM system + user prompt builders
+      llm/                LLMClient protocol + LangChain backend
+    pipeline/     stage implementations
+      __init__.py         run_pipeline(...) orchestrator
+      connector/          raw input → list[record]; exposes run()
+      adapter/            ConfigAdapter; exposes run()
+      cleaner/            heuristic chain; exposes run()
+      validator/          validation runner; exposes run()
+      qualifier/          cross-event quality + stats; exposes run()
+    domain/       value objects (no I/O)
+      models.py           CanonicalEvent, Payload, Quality, Stage, …
+      rules.py            quality_rules.yaml loader
+      coerce.py           try_coerce_numeric (used by cleaner + adapter)
+    configs/
+      quality_rules.yaml  canonical category quality rules
+      examples/           few-shot YAMLs for /api/generate-config
+      existing_configs/   user-saved + LLM-generated adapter configs
+    pyproject.toml
+    Dockerfile
   frontend/       Next.js (app router, output: export) + Monaco editor
     app/          single-page route
-    components/   DataInput, YamlEditor, ResultsPanel, ConfigBrowser
+    components/   ConnectorPanel, AdapterPanel, ResultsPanel, …
   sample_data/    fixtures (mHealth, MemoryMR, Linguistic Games, Virtual Supermarket)
+  docker-compose.yml      one service: `api`
 ```
 
 Pipeline flow (one HTTP request through `/api/transform`):
 
 ```
-JSON record
-   ↓ JsonConnector
-   ↓ AdapterRegistry.get_adapter(metadata, record)
-   ↓ ConfigAdapter.transform(record)        → CanonicalEvent[stage=STRUCTURED]
-   ↓ Cleaner.apply_all                      → stage=CLEANED   (timestamp norm, unit infer, type coerce, ws strip)
-   ↓ ValidationRunner.apply_all             → stage=VALIDATED (required fields, timestamp, payload, unit, range)
-   ↓ Qualifier.apply_all                    → stage=QUALIFIED (completeness, duplicates, Hampel outliers, conformance, plausibility)
+data, yaml_text, source, format
+   ↓ pipeline.connector.run        → SourceMetadata, list[record]
+   ↓ pipeline.adapter.run          → CanonicalEvent[stage=STRUCTURED]
+   ↓ pipeline.cleaner.run          → stage=CLEANED   (whitespace strip, timestamp norm, type coerce, unit infer)
+   ↓ pipeline.validator.run        → stage=VALIDATED (required fields, timestamp, payload, unit, range)
+   ↓ pipeline.qualifier.run        → stage=QUALIFIED (completeness, duplicates, Hampel outliers, conformance, plausibility) + stats
 HTTP response (events + stats)
 ```
 
-`MAPPED` and `STANDARDIZED` are declared in the `Stage` enum but not yet implemented — see "Future work" below.
+Each `pipeline.<stage>.run` is a plain Python function — set a breakpoint, hit the endpoint, the breakpoint fires. `MAPPED` and `STANDARDIZED` are declared in the `Stage` enum but not yet implemented — see "Future work" below.
 
 ## Key abstractions
 
 | Concept | Location | Notes |
 |---|---|---|
-| `CanonicalEvent` | `backend/src/models/canonical.py` | Dataclass. Composes `Payload`, `Context`, `Provenance`, `Mapping`, `Quality`, `Stage`. |
+| `CanonicalEvent` | `backend/domain/models.py` | Dataclass. Composes `Payload`, `Context`, `Provenance`, `Mapping`, `Quality`, `Stage`. |
 | `Quality` | same | Holds `flags`, `conformance` (`"ok"`\|`"issues"`), `completeness` (ratio), `plausibility` (`"ok"`\|`"review"`\|`"exclude"`), and audit fields `expected_field_count` / `present_field_count`. Aligns with Kahn et al. 2016 (Conformance / Completeness / Plausibility). |
-| `ConfigAdapter` | `backend/src/adapters/config_adapter.py` | Tier-1 YAML-driven adapter — no source-specific Python. Supports dot-paths with `[idx]`, `@item` for iteration, transforms (`start_of_day`, `iso_millis`, …), templates, lookups, conditional quality flags. |
-| `Cleaner` | `backend/src/cleaning/cleaner.py` | Default chain: `WhitespaceStripper → TimestampNormalizer → TypeCoercer → UnitInferrer`. Each is a `BaseHeuristic` (Event→Event, may mutate). |
-| `BaseValidator` | `backend/src/validation/base.py` | Validators ASSERT only — must not mutate. Returns `list[QualityFlag]`. The runner appends and de-dups. |
-| `ValidationRunner` | `backend/src/validation/runner.py` | Loads `quality_rules.yaml`, runs five built-in validators, sets `stage=VALIDATED`. |
-| `Qualifier` | `backend/src/qualification/qualifier.py` | Cross-event: completeness ratio, duplicate fingerprint, Hampel outlier (median ± 3.5·MAD per `(subject_id, category)`, min group size 5), then derives conformance + plausibility. Sets `stage=QUALIFIED`. |
+| `ConfigAdapter` | `backend/pipeline/adapter/config_adapter.py` | Tier-1 YAML-driven adapter — no source-specific Python. Supports dot-paths with `[idx]`, `@item` for iteration, transforms (`start_of_day`, `iso_millis`, …), templates, lookups, conditional quality flags. |
+| `Cleaner` | `backend/pipeline/cleaner/cleaner.py` | Default chain: `WhitespaceStripper → TimestampNormalizer → TypeCoercer → UnitInferrer`. Each is a `BaseHeuristic` (Event→Event, may mutate). |
+| `BaseValidator` | `backend/pipeline/validator/base.py` | Validators ASSERT only — must not mutate. Returns `list[QualityFlag]`. The runner appends and de-dups. |
+| `ValidationRunner` | `backend/pipeline/validator/runner.py` | Loads `quality_rules.yaml`, runs five built-in validators, sets `stage=VALIDATED`. |
+| `Qualifier` | `backend/pipeline/qualifier/qualifier.py` | Cross-event: completeness ratio, duplicate fingerprint, Hampel outlier (median ± 3.5·MAD per `(subject_id, category)`, min group size 5), then derives conformance + plausibility. Sets `stage=QUALIFIED`. |
 | `quality_rules.yaml` | `backend/configs/quality_rules.yaml` | Central category rules: `expected_fields`, `unit_whitelist`, `range`, `plausibility_thresholds`, `timestamp_window`. Adapter YAMLs may declare per-emit-rule `quality_overrides:` to narrow these. |
 
 ## Running the project
@@ -56,9 +78,13 @@ Backend (Python ≥ 3.11):
 ```bash
 cd backend
 pip install -e .
-cp .env.example .env   # set ANTHROPIC_API_KEY (or OPENAI_/GOOGLE_)
+# create .env with ANTHROPIC_API_KEY (or OPENAI_/GOOGLE_) + LLM_PROVIDER + LLM_MODEL
 uvicorn api.main:app --reload --port 8000
 ```
+
+Or in a container: `docker compose up -d` (one service, `harmonia-api`, on :8000).
+
+For debugging in VS Code, F5 launches the "Debug API" config (defined in `.vscode/launch.json`) — same uvicorn invocation under debugpy. Set a breakpoint anywhere in `pipeline/` and it will hit on the next `/api/transform`.
 
 Frontend (Node ≥ 18):
 
@@ -68,7 +94,7 @@ npm install
 npm run dev    # http://localhost:3000
 ```
 
-Endpoints (see `backend/api/routes.py`): `POST /api/generate-config`, `POST /api/transform`, `GET /api/configs`, `POST /api/configs/match`, `GET /api/healthz`. Env vars are documented in README.md.
+Endpoints (see `backend/api/routes.py`): `POST /api/generate-config`, `POST /api/transform`, `GET /api/configs`, `POST /api/configs/match`, `PUT /api/configs/{id}`, `GET /api/healthz`. Env vars are documented in README.md.
 
 ## Conventions and invariants
 
@@ -84,15 +110,22 @@ Endpoints (see `backend/api/routes.py`): `POST /api/generate-config`, `POST /api
 
 | What | Where |
 |---|---|
-| HTTP API | `backend/api/routes.py` |
+| FastAPI app | `backend/api/main.py` |
+| HTTP routes | `backend/api/routes.py` |
+| Pydantic schemas | `backend/api/models.py` |
 | LLM client + prompts | `backend/api/llm/`, `backend/api/prompts.py` |
-| Pipeline orchestrator | `backend/src/pipeline.py` |
-| Adapter engine | `backend/src/adapters/config_adapter.py` |
-| Cleaning heuristics | `backend/src/heuristics/{timestamp,units}.py` (existing) + `backend/src/cleaning/` (new) |
-| Validators | `backend/src/validation/` |
-| Qualifier | `backend/src/qualification/` |
-| Quality rules | `backend/configs/quality_rules.yaml` |
-| Adapter examples (= LLM few-shot) | `backend/configs/*.yaml` |
+| Config CRUD | `backend/api/configs_store.py` |
+| Pipeline orchestrator | `backend/pipeline/__init__.py` |
+| Connector | `backend/pipeline/connector/` |
+| Adapter engine | `backend/pipeline/adapter/config_adapter.py` |
+| Cleaning heuristics | `backend/pipeline/cleaner/` |
+| Validators | `backend/pipeline/validator/` |
+| Qualifier | `backend/pipeline/qualifier/` |
+| Canonical event model | `backend/domain/models.py` |
+| Quality rules loader | `backend/domain/rules.py` |
+| Quality rules data | `backend/configs/quality_rules.yaml` |
+| Adapter examples (= LLM few-shot) | `backend/configs/examples/` |
+| User/LLM-saved configs | `backend/configs/existing_configs/` |
 | Single-page UI | `frontend/app/page.tsx` + `frontend/components/` |
 
 ## Future work / known gaps

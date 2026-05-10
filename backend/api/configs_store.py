@@ -8,10 +8,10 @@ from typing import Any
 import yaml
 from pydantic import BaseModel
 
-from services.adapter.config_adapter import ConfigAdapter
+from pipeline.adapter.config_adapter import ConfigAdapter
 
-# services/gateway/configs_store.py → backend/configs/
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+# api/configs_store.py → backend/configs/
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 CONFIGS_DIR = BACKEND_DIR / "configs" / "existing_configs"
 
 logger = logging.getLogger(__name__)

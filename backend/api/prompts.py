@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-# services/gateway/prompts.py → backend/
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+# api/prompts.py → backend/
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 CONFIG_EXAMPLES_DIR = BACKEND_DIR / "configs" / "examples"
-CANONICAL_MODEL_PATH = BACKEND_DIR / "shared" / "models.py"
+CANONICAL_MODEL_PATH = BACKEND_DIR / "domain" / "models.py"
 
 FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitbit-heart-rate.yaml"]
 
@@ -45,8 +45,15 @@ Value-spec forms (use anywhere a value is needed):
 - fallback: `{ path: "...", fallback: <another-spec> }` — the fallback is itself a full value-spec (recursive).
 - template: `{ template: "literal {path.to.field} more {@item.foo}" }` — brace-interpolation.
 - composite timestamp: `{ date_from: <spec>, time_from: <spec> }` → produces `YYYY-MM-DDTHH:MM:SS.sssZ`.
+- explicit timestamp parsing: `{ path: "...", parse_timestamp: "<strptime-format>" }` — parses the value with Python's `datetime.strptime` (e.g. `"%m/%d/%Y %I:%M:%S %p"` for `"3/12/2016 2:00:00 AM"`) and emits ISO 8601 in UTC. Naive timestamps are assumed UTC; aware timestamps are converted. Combinable with `template:` to merge separate date and time columns: `{ template: "{ActivityDate} {ActivityTime}", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }`.
 - arithmetic: `{ multiply: [<spec>, <spec>, ...] }`.
 - lookup table: `{ lookup: { key: <spec>, map: { "k1": "v1", ... }, default: <value> } }`.
+
+Timestamp format selection (MANDATORY):
+- Inspect every timestamp/date column in the input sample. If a column is already strict ISO 8601 (e.g. `"2025-01-12T06:04:00Z"` or `"2025-01-12T06:04:00.000Z"`) use `transform: iso_millis`.
+- If it is anything else — `"3/12/2016 2:00:00 AM"`, `"2016-03-12 02:00"`, `"12-Mar-2016"`, epoch seconds, etc. — emit `parse_timestamp` with the exact `strptime` directives that match the observed sample. Do NOT guess; pick directives that round-trip every example value in the sample.
+- Common directives: `%Y` 4-digit year, `%m` zero-padded month, `%d` zero-padded day, `%H` 24-hour, `%I` 12-hour, `%M` minutes, `%S` seconds, `%p` AM/PM, `%z` ±HHMM offset. The Fitabase export uses `%m/%d/%Y %I:%M:%S %p`.
+- If date and time arrive in two columns, combine them with a `template:` spec and apply `parse_timestamp:` to the combined string.
 
 Rule structure:
 - id, description (free text).

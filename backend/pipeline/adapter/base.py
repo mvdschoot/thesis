@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from shared.models import CanonicalEvent, SourceMetadata
+from domain.models import CanonicalEvent, SourceMetadata
 
 
 class BaseAdapter(ABC):

@@ -1,7 +1,7 @@
-"""Quality-rules loader, used by the validator and qualifier services.
+"""Quality-rules loader, used by the validator and qualifier stages.
 
-The path defaults to /app/configs/quality_rules.yaml inside containers; can
-be overridden with the QUALITY_RULES_PATH env var.
+Resolves to backend/configs/quality_rules.yaml relative to this file.
+Override with QUALITY_RULES_PATH for tests or non-default deployments.
 """
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PATH = Path("/app/configs/quality_rules.yaml")
+# domain/rules.py → backend/configs/quality_rules.yaml
+_DEFAULT_PATH = Path(__file__).resolve().parent.parent / "configs" / "quality_rules.yaml"
 
 
 def quality_rules_path() -> Path:

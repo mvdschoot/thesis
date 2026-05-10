@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from shared.models import CanonicalEvent, QualityFlag, Stage
+from domain.models import CanonicalEvent, QualityFlag, Stage
 
 from .base import BaseValidator
 from .payload_validator import PayloadValidator

@@ -1,0 +1,53 @@
+adapter:
+  id: "fitbit-hourly-intensity-v1"
+  version: "1.0.0"
+  description: "Fitbit hourly total and average intensity records; emits one event per row with intensity values in METs."
+
+match:
+  source: "fitbit"
+  record:
+    - { field: "Id", exists: true }
+    - { field: "ActivityHour", exists: true }
+    - { field: "TotalIntensity", exists: true }
+    - { field: "AverageIntensity", exists: true }
+
+defaults:
+  subject_id: { path: "Id" }
+  context:
+    source: "fitbit"
+    modality: "wearable"
+    device: null
+    source_measurement_type: "hourly intensity"
+  stage: "structured"
+  source_record_id:
+    template: "fitbit:{Id}:{ActivityHour}"
+
+emit:
+  - id: "hourly-intensity"
+    description: "Hourly Fitbit intensity summary with total and average intensity in METs"
+    type: "measurement"
+    category: "activity-intensity"
+    granularity: "interval"
+    timestamp:
+      start: { path: "ActivityHour", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
+      end:
+        fallback:
+          path: "ActivityHour"
+          fallback: { path: "ActivityHour", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
+      duration_seconds: 3600
+    payload:
+      value: { path: "TotalIntensity", to_float: true }
+      raw_value:
+        template: "total={TotalIntensity};average={AverageIntensity}"
+      unit: "MET"
+      label: "TotalIntensity"
+      components:
+        - name: "total_intensity"
+          value: { path: "TotalIntensity", to_float: true }
+          unit: "MET"
+        - name: "average_intensity"
+          value: { path: "AverageIntensity", to_float: true }
+          unit: "MET"
+    extensions:
+      fitbit.totalIntensity: { path: "TotalIntensity", to_float: true }
+      fitbit.averageIntensity: { path: "AverageIntensity", to_float: true }

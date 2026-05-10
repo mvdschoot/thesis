@@ -6,14 +6,16 @@ canonical events without any source-specific code.
 
 from __future__ import annotations
 
+import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from shared.coerce import try_coerce_numeric
-from shared.models import (
+from domain.coerce import try_coerce_numeric
+from domain.models import (
     CanonicalEvent,
     Component,
     Context,
@@ -31,6 +33,8 @@ from shared.models import (
 )
 
 from .base import BaseAdapter
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_path(obj: Any, path: str) -> Any:
@@ -98,6 +102,32 @@ def _apply_transform(value: Any, transform: str) -> Any:
     return value
 
 
+def _parse_timestamp(value: Any, format_str: str) -> Any:
+    """Parse a timestamp string with an explicit ``strptime`` format and emit
+    ISO 8601 with millisecond precision in UTC.
+
+    Naive parsed values are interpreted as UTC (matches the cleaner's
+    TIMEZONE_ASSUMED_UTC convention). Aware values are converted to UTC.
+    Returns the original value unchanged on parse failure so the validator
+    can flag it downstream.
+    """
+    if value is None or value == "":
+        return value
+    try:
+        dt = datetime.strptime(str(value), format_str)
+    except (ValueError, TypeError) as e:
+        logger.warning(
+            "parse_timestamp failed: value=%r format=%r error=%s", value, format_str, e
+        )
+        return value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    millis = dt.microsecond // 1000
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{millis:03d}Z"
+
+
 def _resolve_value(
     spec: Any, record: dict[str, Any], item: Any | None = None
 ) -> Any:
@@ -127,6 +157,8 @@ def _resolve_value(
             value = _resolve_value(spec["fallback"], record, item)
         if "transform" in spec:
             value = _apply_transform(value, spec["transform"])
+        if "parse_timestamp" in spec:
+            value = _parse_timestamp(value, spec["parse_timestamp"])
         return value
 
     if "date_from" in spec and "time_from" in spec:
@@ -157,7 +189,10 @@ def _resolve_value(
                 v = _resolve_path(record, ref)
             return str(v) if v is not None else ""
 
-        return re.sub(r"\{(.+?)\}", replacer, template)
+        rendered = re.sub(r"\{(.+?)\}", replacer, template)
+        if "parse_timestamp" in spec:
+            rendered = _parse_timestamp(rendered, spec["parse_timestamp"])
+        return rendered
 
     if "lookup" in spec:
         lk = spec["lookup"]
@@ -274,8 +309,6 @@ class ConfigAdapter(BaseAdapter):
         return self._adapter_info["version"]
 
     def can_handle(self, metadata: SourceMetadata, record: dict[str, Any]) -> bool:
-        if metadata.source_name != self._match["source"]:
-            return False
         for condition in self._match.get("record", []):
             if not _evaluate_predicate(condition, record):
                 return False

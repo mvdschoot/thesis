@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from shared.models import CanonicalEvent, Severity, Stage
+from domain.models import CanonicalEvent, Severity, Stage
 
 from .completeness import compute_completeness
 from .duplicates import detect_duplicates

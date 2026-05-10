@@ -8,7 +8,7 @@ import type { TransformFormat } from "@/lib/api";
 
 export type InputMode = "sample" | "custom";
 
-const PREVIEW_MAX = 20_000;
+const PREVIEW_MAX = 1_000;
 
 interface Props {
   mode: InputMode;

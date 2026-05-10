@@ -2,38 +2,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug adapter (local · others in docker)",
+            "name": "Debug API",
             "type": "debugpy",
             "request": "launch",
-            "module": "services.adapter.worker",
+            "module": "uvicorn",
+            "args": ["api.main:app", "--reload", "--port", "8000"],
             "cwd": "${workspaceFolder}/backend",
             "python": "${workspaceFolder}/.venv/Scripts/python.exe",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/backend",
-                "KAFKA_BOOTSTRAP": "localhost:29092",
                 "PYTHONNOUSERSITE": "1"
             },
-            "envFile": "${workspaceFolder}/backend/.env",
-            "preLaunchTask": "compose: stop adapter-svc"
-        },
-        {
-            "name": "Debug gateway (local · others in docker)",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "services.gateway.app",
-            "cwd": "${workspaceFolder}/backend",
-            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/backend",
-                "KAFKA_BOOTSTRAP": "localhost:29092",
-                "PYTHONNOUSERSITE": "1"
-            },
-            "envFile": "${workspaceFolder}/backend/.env",
-            "preLaunchTask": "compose: stop gateway-svc"
+            "envFile": "${workspaceFolder}/backend/.env"
         }
     ]
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from shared.models import CanonicalEvent, QualityFlag, Severity
+from domain.models import CanonicalEvent, QualityFlag, Severity
 
 from .base import BaseValidator
 

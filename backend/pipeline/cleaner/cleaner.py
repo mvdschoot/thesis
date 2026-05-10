@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from shared.models import CanonicalEvent, Stage
+from domain.models import CanonicalEvent, Stage
 
 from .base import BaseHeuristic, HeuristicChain
 from .coercion import TypeCoercer

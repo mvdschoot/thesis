@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import median
 
-from shared.models import CanonicalEvent, QualityFlag, Severity
+from domain.models import CanonicalEvent, QualityFlag, Severity
 
 _HAMPEL_THRESHOLD = 3.5  # number of MADs from the median
 _MIN_GROUP_SIZE = 5
