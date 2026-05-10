@@ -1,0 +1,46 @@
+adapter:
+  id: "generic-heart-rate-csv-v1"
+  version: "1.0.0"
+  description: "CSV heart rate readings in BPM sampled every 5 seconds"
+
+match:
+  source: "csv"
+  record:
+    - { field: "Id", exists: true }
+    - { field: "Time", exists: true }
+    - { field: "Value", exists: true }
+    - { field: "Id", type: "string" }
+    - { field: "Time", type: "string" }
+    - { field: "Value", type: "number" }
+
+defaults:
+  subject_id: { path: "Id" }
+  context:
+    source: "csv"
+    modality: "wearable"
+    device: null
+    source_measurement_type: "heart-rate"
+  stage: "structured"
+  source_record_id:
+    template: "csv:{Id}:{Time}"
+
+emit:
+  - id: "heart-rate-interval"
+    description: "Single heart rate sample from CSV"
+    type: "measurement"
+    category: "heart-rate"
+    granularity: "interval"
+
+    timestamp:
+      start: { path: "Time", transform: "iso_millis" }
+      duration_seconds: 5
+
+    payload:
+      value: { path: "Value", transform: "to_float" }
+      raw_value: { path: "Value" }
+      unit: "bpm"
+      label: "Heart Rate"
+
+    extensions:
+      csv.Id: { path: "Id" }
+      csv.Time: { path: "Time" }

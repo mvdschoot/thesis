@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from shared.coerce import try_coerce_numeric
 from shared.models import (
     CanonicalEvent,
     Component,
@@ -181,9 +182,19 @@ def _check_type(value: Any, expected: str) -> bool:
     if expected == "string":
         return isinstance(value, str)
     if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return True
+        if isinstance(value, str):
+            coerced, ok = try_coerce_numeric(value)
+            return ok and isinstance(coerced, int) and not isinstance(coerced, bool)
+        return False
     if expected == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        if isinstance(value, str):
+            coerced, ok = try_coerce_numeric(value)
+            return ok and isinstance(coerced, (int, float)) and not isinstance(coerced, bool)
+        return False
     if expected == "boolean":
         return isinstance(value, bool)
     raise ValueError(f"Unknown match predicate type: {expected!r}")

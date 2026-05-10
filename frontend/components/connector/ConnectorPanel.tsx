@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import { SAMPLE_DATASETS } from "@/lib/sampleData";
 import type { TransformFormat } from "@/lib/api";
 
 export type InputMode = "sample" | "custom";
+
+const PREVIEW_MAX = 20_000;
 
 interface Props {
   mode: InputMode;
@@ -45,6 +47,15 @@ export default function ConnectorPanel({
   const ds = SAMPLE_DATASETS[datasetKey];
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [drag, setDrag] = useState(false);
+
+  const previewText = useMemo(() => {
+    if (mode !== "custom") return JSON.stringify(ds.record, null, 2);
+    if (!customText) return "// paste or drop a file to preview";
+    if (customText.length <= PREVIEW_MAX) return customText;
+    return customText.slice(0, PREVIEW_MAX) + "\n…";
+  }, [mode, ds, customText]);
+
+  const previewTruncated = mode === "custom" && customText.length > PREVIEW_MAX;
 
   const handleFile = (file: File) => {
     const fmt = formatFromFilename(file.name);
@@ -210,11 +221,13 @@ export default function ConnectorPanel({
             <span className="chip">{mode === "custom" ? customFormat : "sample"}</span>
           </div>
           <div className="card-body">
-            <pre className="code-pre">
-              {mode === "custom"
-                ? customText || "// paste or drop a file to preview"
-                : JSON.stringify(ds.record, null, 2)}
-            </pre>
+            <pre className="code-pre">{previewText}</pre>
+            {previewTruncated && (
+              <p className="help" style={{ marginTop: 8 }}>
+                Showing first {PREVIEW_MAX.toLocaleString()} of{" "}
+                {customText.length.toLocaleString()} characters · full content sent to backend on Run.
+              </p>
+            )}
           </div>
         </div>
       </div>

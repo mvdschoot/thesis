@@ -7,9 +7,10 @@ import type {
   EventType,
   Granularity,
   Severity,
+  Stage,
 } from "@/lib/types";
 
-import PathPill from "../PathPill";
+import BindingInput from "./BindingInput";
 
 type EmitComponent = NonNullable<AdapterEmitRule["payload"]["components"]>[number];
 
@@ -31,9 +32,22 @@ const GRANULARITIES: Granularity[] = ["instant", "interval", "daily", "session",
 
 const SEVERITIES: Severity[] = ["info", "warning", "error"];
 
+const STAGES: Stage[] = [
+  "raw",
+  "structured",
+  "cleaned",
+  "validated",
+  "qualified",
+  "mapped",
+  "standardized",
+];
+
 export default function EmitEditor({ emit, onChange }: Props) {
   const updPayload = (patch: Partial<AdapterEmitRule["payload"]>) =>
     onChange({ ...emit, payload: { ...emit.payload, ...patch } });
+
+  const updTimestamp = (patch: Partial<AdapterEmitRule["timestamp"]>) =>
+    onChange({ ...emit, timestamp: { ...emit.timestamp, ...patch } });
 
   const addComp = () =>
     updPayload({
@@ -70,6 +84,10 @@ export default function EmitEditor({ emit, onChange }: Props) {
     setFlags(arr);
   };
   const rmFlag = (i: number) => setFlags(flags.filter((_, j) => j !== i));
+
+  // category can be a literal string or a Binding. Treat string as the simple
+  // path. Toggle button below switches to a binding.
+  const categoryIsString = typeof emit.category === "string";
 
   return (
     <div>
@@ -110,15 +128,34 @@ export default function EmitEditor({ emit, onChange }: Props) {
         </div>
         <div className="field">
           <label>category</label>
-          {typeof emit.category === "string" ? (
-            <input
-              className="input mono"
-              value={emit.category}
-              onChange={(e) => onChange({ ...emit, category: e.target.value })}
-            />
+          {categoryIsString ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                className="input mono"
+                value={emit.category as string}
+                onChange={(e) => onChange({ ...emit, category: e.target.value })}
+              />
+              <button
+                className="btn tiny"
+                title="Switch to a binding (path/template)"
+                onClick={() => onChange({ ...emit, category: { path: "" } })}
+              >
+                →path
+              </button>
+            </div>
           ) : (
-            <div>
-              <PathPill binding={emit.category as Binding} />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <BindingInput
+                value={emit.category}
+                onChange={(b) => onChange({ ...emit, category: (b ?? "") as Binding })}
+              />
+              <button
+                className="btn tiny"
+                title="Switch to a literal string"
+                onClick={() => onChange({ ...emit, category: "" })}
+              >
+                →literal
+              </button>
             </div>
           )}
         </div>
@@ -134,80 +171,127 @@ export default function EmitEditor({ emit, onChange }: Props) {
         />
       </div>
 
-      {emit.iterate && (
-        <>
-          <div className="spacer-md" />
-          <div className="field">
-            <label>iterate · emits one event per array item</label>
-            <div className="row">
-              <input
-                className="input mono"
-                value={emit.iterate}
-                onChange={(e) => onChange({ ...emit, iterate: e.target.value })}
-              />
-              <span className="chip accent" style={{ flex: 0 }}>
-                @item
-              </span>
-            </div>
-          </div>
-        </>
-      )}
+      <div className="spacer-sm" />
+      <div className="field">
+        <label>iterate · emits one event per array item (leave blank if not iterating)</label>
+        <div className="row" style={{ alignItems: "center" }}>
+          <input
+            className="input mono"
+            value={emit.iterate ?? ""}
+            placeholder="e.g. items"
+            onChange={(e) => {
+              const v = e.target.value;
+              const next = { ...emit };
+              if (v) next.iterate = v;
+              else delete next.iterate;
+              onChange(next);
+            }}
+          />
+          <span className="chip accent" style={{ flex: 0 }}>
+            @item
+          </span>
+        </div>
+      </div>
 
       <div className="ascii-sep">— TIMESTAMP —</div>
-      <div className="row" style={{ alignItems: "flex-start" }}>
-        <div className="field">
+      <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div className="field" style={{ minWidth: 280 }}>
           <label>start</label>
-          <div>
-            <PathPill binding={emit.timestamp.start} />
-          </div>
+          <BindingInput
+            value={emit.timestamp.start}
+            onChange={(b) => updTimestamp({ start: b })}
+            placeholder="timestamp path"
+          />
         </div>
-        {emit.timestamp.end && (
-          <div className="field">
-            <label>end</label>
-            <div>
-              <PathPill binding={emit.timestamp.end} />
-            </div>
-          </div>
-        )}
-        {emit.timestamp.duration_seconds != null && (
-          <div className="field">
-            <label>duration_seconds</label>
-            <div>
-              {typeof emit.timestamp.duration_seconds === "number" ? (
-                <span className="chip mono">{emit.timestamp.duration_seconds}</span>
-              ) : (
-                <PathPill binding={emit.timestamp.duration_seconds} />
-              )}
-            </div>
-          </div>
-        )}
+        <div className="field" style={{ minWidth: 280 }}>
+          <label>
+            end
+            {emit.timestamp.end == null && (
+              <button
+                className="btn tiny"
+                style={{ marginLeft: 6 }}
+                onClick={() => updTimestamp({ end: { path: "" } })}
+              >
+                + add
+              </button>
+            )}
+          </label>
+          {emit.timestamp.end != null && (
+            <BindingInput
+              value={emit.timestamp.end}
+              removable
+              onChange={(b) => {
+                if (b === undefined) {
+                  const next = { ...emit.timestamp };
+                  delete next.end;
+                  onChange({ ...emit, timestamp: next });
+                } else {
+                  updTimestamp({ end: b });
+                }
+              }}
+            />
+          )}
+        </div>
+        <div className="field" style={{ minWidth: 280 }}>
+          <label>
+            duration_seconds
+            {emit.timestamp.duration_seconds == null && (
+              <button
+                className="btn tiny"
+                style={{ marginLeft: 6 }}
+                onClick={() => updTimestamp({ duration_seconds: 0 })}
+              >
+                + add
+              </button>
+            )}
+          </label>
+          {emit.timestamp.duration_seconds != null && (
+            <BindingInput
+              value={emit.timestamp.duration_seconds}
+              removable
+              onChange={(b) => {
+                if (b === undefined) {
+                  const next = { ...emit.timestamp };
+                  delete next.duration_seconds;
+                  onChange({ ...emit, timestamp: next });
+                } else {
+                  updTimestamp({ duration_seconds: b });
+                }
+              }}
+            />
+          )}
+        </div>
       </div>
 
       <div className="ascii-sep">— PAYLOAD —</div>
-      <div className="row">
-        <div className="field">
+      <div className="row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div className="field" style={{ minWidth: 280 }}>
           <label>value</label>
-          <div>
-            <PathPill binding={emit.payload.value} />
-          </div>
+          <BindingInput
+            value={emit.payload.value}
+            onChange={(b) => updPayload({ value: b })}
+          />
         </div>
-        <div className="field">
+        <div className="field" style={{ minWidth: 280 }}>
           <label>raw_value</label>
-          <div>
-            <PathPill binding={emit.payload.raw_value} />
-          </div>
+          <BindingInput
+            value={emit.payload.raw_value}
+            onChange={(b) => updPayload({ raw_value: b })}
+          />
         </div>
-        <div className="field">
+        <div className="field" style={{ minWidth: 280 }}>
           <label>unit</label>
-          <div>
-            <PathPill binding={emit.payload.unit} />
-          </div>
+          <BindingInput
+            value={emit.payload.unit}
+            onChange={(b) => updPayload({ unit: b })}
+          />
         </div>
-        <div className="field">
+        <div className="field" style={{ minWidth: 280 }}>
           <label>label</label>
-          <div>
-            <PathPill binding={emit.payload.label} />
-          </div>
+          <BindingInput
+            value={emit.payload.label}
+            onChange={(b) => updPayload({ label: b })}
+          />
         </div>
       </div>
 
@@ -224,9 +308,10 @@ export default function EmitEditor({ emit, onChange }: Props) {
                 value={c.name}
                 onChange={(e) => updComp(i, { name: e.target.value })}
               />
-              <div>
-                <PathPill binding={c.value as Binding} />
-              </div>
+              <BindingInput
+                value={c.value as Binding}
+                onChange={(b) => updComp(i, { value: b })}
+              />
               <input
                 className="input mono"
                 value={c.unit ?? ""}
@@ -262,7 +347,7 @@ export default function EmitEditor({ emit, onChange }: Props) {
         <div key={i} className={cx("qflag", f.severity)} style={{ marginBottom: 8 }}>
           <div className="qf-bar" />
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input
                 className="input mono qf-code"
                 value={f.code ?? ""}
@@ -281,9 +366,19 @@ export default function EmitEditor({ emit, onChange }: Props) {
                   <option key={s}>{s}</option>
                 ))}
               </select>
-              <span className="muted mono" style={{ fontSize: 10 }}>
-                @stage={f.stage ?? "structured"}
-              </span>
+              <label className="muted mono" style={{ fontSize: 10 }}>
+                stage
+              </label>
+              <select
+                className="select"
+                style={{ width: 130, fontSize: 11 }}
+                value={(f.stage as Stage) ?? "structured"}
+                onChange={(e) => updFlag(i, { stage: e.target.value })}
+              >
+                {STAGES.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
               <button
                 className="btn ghost icon"
                 onClick={() => rmFlag(i)}
@@ -299,14 +394,68 @@ export default function EmitEditor({ emit, onChange }: Props) {
               onChange={(e) => updFlag(i, { message: e.target.value })}
               style={{ marginTop: 6 }}
             />
-            {f.condition && (
-              <div className="qf-meta" style={{ marginTop: 6 }}>
-                when {f.condition.field}{" "}
-                {f.condition.equals !== undefined
-                  ? `equals ${JSON.stringify(f.condition.equals)}`
-                  : ""}
-              </div>
-            )}
+            <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {f.condition ? (
+                <>
+                  <span className="muted mono" style={{ fontSize: 10 }}>
+                    when
+                  </span>
+                  <input
+                    className="input mono"
+                    style={{ width: 160, padding: "3px 8px", fontSize: 11 }}
+                    value={f.condition.field}
+                    placeholder="field"
+                    onChange={(e) =>
+                      updFlag(i, {
+                        condition: { ...f.condition!, field: e.target.value },
+                      })
+                    }
+                  />
+                  <span className="muted mono" style={{ fontSize: 10 }}>
+                    equals
+                  </span>
+                  <input
+                    className="input mono"
+                    style={{ width: 160, padding: "3px 8px", fontSize: 11 }}
+                    value={
+                      f.condition.equals === undefined
+                        ? ""
+                        : typeof f.condition.equals === "string"
+                          ? f.condition.equals
+                          : JSON.stringify(f.condition.equals)
+                    }
+                    placeholder="value"
+                    onChange={(e) =>
+                      updFlag(i, {
+                        condition: { ...f.condition!, equals: e.target.value },
+                      })
+                    }
+                  />
+                  <button
+                    className="btn ghost icon"
+                    title="Remove condition"
+                    onClick={() => {
+                      const arr = [...flags];
+                      const next = { ...f };
+                      delete next.condition;
+                      arr[i] = next;
+                      setFlags(arr);
+                    }}
+                  >
+                    ×
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="btn tiny"
+                  onClick={() =>
+                    updFlag(i, { condition: { field: "", equals: "" } })
+                  }
+                >
+                  + Add condition
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}

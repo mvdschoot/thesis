@@ -18,6 +18,16 @@ const MODALITIES: Modality[] = [
   "unknown",
 ];
 
+const STAGES: Stage[] = [
+  "raw",
+  "structured",
+  "cleaned",
+  "validated",
+  "qualified",
+  "mapped",
+  "standardized",
+];
+
 type SmtBinding = NonNullable<NonNullable<DefaultsBlock["context"]>["source_measurement_type"]>;
 
 function smtPath(value: SmtBinding | undefined): string {
@@ -104,9 +114,17 @@ export default function DefaultsEditor({ defaults, onChange }: Props) {
       <div className="spacer-md" />
       <div className="field">
         <label>initial stage</label>
-        <div>
-          <span className="chip">{(defaults.stage as Stage) ?? "structured"}</span>
-        </div>
+        <select
+          className="select"
+          value={(defaults.stage as Stage) ?? "structured"}
+          onChange={(e) => onChange({ ...defaults, stage: e.target.value as Stage })}
+        >
+          {STAGES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

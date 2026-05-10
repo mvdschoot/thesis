@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { updateConfig, type ConfigMatch } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { AdapterConfig } from "@/lib/types";
+import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
 
-import YamlBlock from "../YamlBlock";
 import DefaultsEditor from "./DefaultsEditor";
 import EmitEditor from "./EmitEditor";
 import LLMDialog from "./LLMDialog";
 import MatchEditor from "./MatchEditor";
+import YamlEditor from "./YamlEditor";
 
 type Tab = "header" | "match" | "defaults" | "emit";
 
@@ -24,6 +26,7 @@ interface Props {
   onLLMResult: (yamlText: string, configId: string) => void;
   loading?: boolean;
   loadError?: string | null;
+  matches?: ConfigMatch[] | null;
 }
 
 export default function AdapterPanel({
@@ -37,11 +40,73 @@ export default function AdapterPanel({
   onLLMResult,
   loading,
   loadError,
+  matches,
 }: Props) {
   const [tab, setTab] = useState<Tab>("match");
   const [showYaml, setShowYaml] = useState(false);
   const [emitIdx, setEmitIdx] = useState(0);
   const [showLLM, setShowLLM] = useState(false);
+
+  // YAML editor state — only meaningful while showYaml is true.
+  const [yamlText, setYamlText] = useState<string>("");
+  const [yamlError, setYamlError] = useState<string | null>(null);
+  const [savedYaml, setSavedYaml] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Re-seed the buffer from the current config every time we enter YAML mode
+  // or the active config changes. The parsed config is the source of truth in
+  // visual mode; flipping into YAML mode regenerates the on-disk shape.
+  useEffect(() => {
+    if (!showYaml || !config) return;
+    const text = dumpAdapterYaml(config);
+    setYamlText(text);
+    setSavedYaml(text);
+    setYamlError(null);
+    setSaveError(null);
+    setSavedAt(null);
+    // We want this to fire on entering YAML mode or when the user picks a
+    // different config — not on every visual edit (those are reflected via the
+    // re-seed-on-toggle path).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showYaml, configKey]);
+
+  // Auto-clear "Saved" toast after 2s.
+  useEffect(() => {
+    if (savedAt == null) return;
+    const t = setTimeout(() => setSavedAt(null), 2000);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+
+  const handleYamlChange = (next: string) => {
+    setYamlText(next);
+    try {
+      const parsed = parseAdapterYaml(next);
+      setYamlError(null);
+      onChange(parsed);
+    } catch (e) {
+      setYamlError((e as Error).message);
+    }
+  };
+
+  const dirty = yamlText !== savedYaml;
+  const canSave = showYaml && !yamlError && dirty && !saving && config != null;
+
+  async function handleSave() {
+    if (!canSave) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateConfig(configKey, yamlText);
+      setSavedYaml(yamlText);
+      setSavedAt(Date.now());
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div>
@@ -99,6 +164,92 @@ export default function AdapterPanel({
         </div>
       </div>
 
+      {matches && (
+        <>
+          <div className="spacer-sm" />
+          <div className="card">
+            <div className="card-head">
+              <span className="eyebrow">Matching configs</span>
+              <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>
+                {matches.filter((m) => m.applicable).length} applicable · {matches.length} total
+              </span>
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {matches.length === 0 ? (
+                <div className="empty" style={{ padding: 14 }}>
+                  No configs registered.
+                </div>
+              ) : (
+                <div style={{ maxHeight: 220, overflow: "auto" }}>
+                  {matches.map((m) => {
+                    const active = m.id === configKey;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setConfigKey(m.id)}
+                        className={cx("match-row", active && "active")}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          background: active ? "var(--bg-soft)" : "transparent",
+                          border: "none",
+                          borderBottom: "1px solid var(--line)",
+                          padding: "10px 14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          cursor: "pointer",
+                          color: "inherit",
+                          font: "inherit",
+                        }}
+                      >
+                        <span
+                          className={cx("chip", m.applicable ? "accent" : "")}
+                          style={{ minWidth: 78, textAlign: "center" }}
+                        >
+                          {m.applicable ? "applicable" : "no match"}
+                        </span>
+                        <span className="mono" style={{ minWidth: 0, flexShrink: 0 }}>
+                          {m.id}
+                        </span>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          {m.matched_records}/{m.total_records} records
+                        </span>
+                        {m.adapter.description && (
+                          <span
+                            className="muted"
+                            style={{
+                              fontSize: 12,
+                              marginLeft: "auto",
+                              minWidth: 0,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={m.adapter.description}
+                          >
+                            {m.adapter.description}
+                          </span>
+                        )}
+                        {m.error && (
+                          <span
+                            className="chip"
+                            style={{ color: "var(--err)", borderColor: "var(--err)" }}
+                            title={m.error}
+                          >
+                            error
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="spacer-md" />
 
       {!config ? (
@@ -110,49 +261,101 @@ export default function AdapterPanel({
       ) : (
         <div className="card">
           <div className="card-head" style={{ padding: "0 18px" }}>
-            <div className="tabs" style={{ flex: 1, border: "none" }}>
-              <button
-                className={cx("tab", tab === "match" && "active")}
-                onClick={() => setTab("match")}
+            {showYaml ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 0",
+                }}
               >
-                match
-                <span className="badge">{config.match.record.length}</span>
-              </button>
-              <button
-                className={cx("tab", tab === "defaults" && "active")}
-                onClick={() => setTab("defaults")}
-              >
-                defaults
-              </button>
-              <button
-                className={cx("tab", tab === "emit" && "active")}
-                onClick={() => setTab("emit")}
-              >
-                emit
-                <span className="badge">{config.emit.length}</span>
-              </button>
-              <button
-                className={cx("tab", tab === "header" && "active")}
-                onClick={() => setTab("header")}
-              >
-                adapter header
-              </button>
-            </div>
+                <span className="eyebrow" style={{ margin: 0 }}>
+                  {configKey}.yaml · full file
+                </span>
+                {yamlError ? (
+                  <span className="chip" style={{ color: "var(--err)", borderColor: "var(--err)" }}>
+                    parse error
+                  </span>
+                ) : dirty ? (
+                  <span className="chip">unsaved</span>
+                ) : savedAt ? (
+                  <span className="chip" style={{ color: "var(--accent)" }}>
+                    saved
+                  </span>
+                ) : null}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  <button
+                    className={cx("btn", canSave && "primary")}
+                    disabled={!canSave}
+                    onClick={handleSave}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="tabs" style={{ flex: 1, border: "none" }}>
+                <button
+                  className={cx("tab", tab === "match" && "active")}
+                  onClick={() => setTab("match")}
+                >
+                  match
+                  <span className="badge">{config.match.record.length}</span>
+                </button>
+                <button
+                  className={cx("tab", tab === "defaults" && "active")}
+                  onClick={() => setTab("defaults")}
+                >
+                  defaults
+                </button>
+                <button
+                  className={cx("tab", tab === "emit" && "active")}
+                  onClick={() => setTab("emit")}
+                >
+                  emit
+                  <span className="badge">{config.emit.length}</span>
+                </button>
+                <button
+                  className={cx("tab", tab === "header" && "active")}
+                  onClick={() => setTab("header")}
+                >
+                  adapter header
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="card-body">
             {showYaml ? (
-              <YamlBlock
-                data={
-                  tab === "match"
-                    ? { match: config.match }
-                    : tab === "defaults"
-                      ? { defaults: config.defaults }
-                      : tab === "emit"
-                        ? { emit: [config.emit[emitIdx]] }
-                        : { adapter: config.adapter }
-                }
-              />
+              <>
+                <YamlEditor value={yamlText} onChange={handleYamlChange} height={520} />
+                {yamlError && (
+                  <div className="qflag err" style={{ marginTop: 12 }}>
+                    <div className="qf-bar" />
+                    <div>
+                      <div className="qf-code">YAML_PARSE_ERROR</div>
+                      <div className="qf-msg">{yamlError}</div>
+                    </div>
+                  </div>
+                )}
+                {saveError && (
+                  <div className="qflag err" style={{ marginTop: 12 }}>
+                    <div className="qf-bar" />
+                    <div>
+                      <div className="qf-code">SAVE_FAILED</div>
+                      <div className="qf-msg">{saveError}</div>
+                    </div>
+                  </div>
+                )}
+                <div className="help" style={{ marginTop: 10 }}>
+                  Edits update the visual editor live (when YAML parses). Save writes to{" "}
+                  <span className="mono">backend/configs/{configKey}.yaml</span> via PUT
+                  /api/configs/{configKey}. Renaming <span className="mono">adapter.id</span> is
+                  rejected by the backend.
+                </div>
+              </>
             ) : (
               <>
                 {tab === "header" && (

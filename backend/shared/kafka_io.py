@@ -16,7 +16,9 @@ from aiokafka.errors import KafkaConnectionError
 logger = logging.getLogger(__name__)
 
 # Bumped above the default 1MB so large CSV → events batches fit comfortably.
-MAX_BYTES = 16 * 1024 * 1024
+# 64MB covers ~2 years of hourly Fitbit data per request without chunking. Must
+# stay ≤ KAFKA_MESSAGE_MAX_BYTES on the broker (see docker-compose.yml).
+MAX_BYTES = 64 * 1024 * 1024
 
 
 def bootstrap_servers() -> str:

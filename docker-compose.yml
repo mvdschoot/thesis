@@ -26,15 +26,20 @@ services:
     environment:
       - KAFKA_NODE_ID=0
       - KAFKA_PROCESS_ROLES=controller,broker
-      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      # Two PLAINTEXT listeners: PLAINTEXT for in-network containers (advertises the
+      # docker hostname `kafka`), EXTERNAL for host processes like a locally-debugged
+      # adapter (advertises `localhost`). Without the second listener, host clients
+      # connect to localhost:9092 and the broker tells them "I'm at kafka:9092",
+      # which the host can't resolve → getaddrinfo failures.
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
       - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
       - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-      - KAFKA_MESSAGE_MAX_BYTES=16777216
-      - KAFKA_REPLICA_FETCH_MAX_BYTES=16777216
+      - KAFKA_MESSAGE_MAX_BYTES=67108864
+      - KAFKA_REPLICA_FETCH_MAX_BYTES=67108864
       # Single-broker cluster — the apache/kafka image defaults internal topics
       # to RF=3, which blocks __consumer_offsets creation and stalls every
       # consumer in GroupCoordinatorNotAvailableError. Force RF=1.
@@ -45,6 +50,7 @@ services:
       - KAFKA_LOG_DIRS=/var/lib/kafka/data
     ports:
       - "9092:9092"
+      - "29092:29092"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -65,7 +71,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-claude-opus-4-7}
       - TRANSFORM_TIMEOUT_SECONDS=${TRANSFORM_TIMEOUT_SECONDS:-60}
     ports:

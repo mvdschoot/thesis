@@ -12,7 +12,7 @@ from services.adapter.config_adapter import ConfigAdapter
 
 # services/gateway/configs_store.py → backend/configs/
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-CONFIGS_DIR = BACKEND_DIR / "configs"
+CONFIGS_DIR = BACKEND_DIR / "configs" / "existing_configs"
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import type { CanonicalEvent } from "@/lib/types";
 
 type Filter = "all" | "warn" | "err" | "ok";
+
+const PAGE_SIZE = 200;
 
 interface Props {
   events: CanonicalEvent[];
@@ -28,6 +30,7 @@ function plausibilityChip(p: string | null): string {
 
 export default function EventTable({ events, selectedId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [page, setPage] = useState(0);
 
   const filtered = events.filter((e) => {
     if (filter === "all") return true;
@@ -36,6 +39,14 @@ export default function EventTable({ events, selectedId, onSelect }: Props) {
     if (filter === "ok") return e.quality.flags.length === 0;
     return true;
   });
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(0);
+  }, [filter, events]);
 
   return (
     <div className="card">
@@ -70,7 +81,7 @@ export default function EventTable({ events, selectedId, onSelect }: Props) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((e) => {
+            {pageRows.map((e) => {
               const [date, rest] = e.timestamp.split("T");
               const time = rest?.replace("Z", "");
               return (
@@ -118,6 +129,36 @@ export default function EventTable({ events, selectedId, onSelect }: Props) {
           </tbody>
         </table>
       </div>
+      {filtered.length > PAGE_SIZE && (
+        <div
+          className="card-head"
+          style={{
+            padding: "8px 14px",
+            borderTop: "1px solid var(--line)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <span className="muted" style={{ fontSize: 12 }}>
+            Page {safePage + 1} of {pageCount} · {filtered.length.toLocaleString()} events
+          </span>
+          <div className="seg" style={{ marginLeft: "auto" }}>
+            <button
+              disabled={safePage === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              prev
+            </button>
+            <button
+              disabled={safePage >= pageCount - 1}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

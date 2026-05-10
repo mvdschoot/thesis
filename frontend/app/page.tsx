@@ -12,7 +12,9 @@ import Topbar from "@/components/Topbar";
 import {
   getConfig,
   listConfigs,
+  matchConfigs,
   transform,
+  type ConfigMatch,
   type TransformFormat,
   type TransformResponse,
 } from "@/lib/api";
@@ -60,6 +62,9 @@ export default function Page() {
   const [runResult, setRunResult] = useState<TransformResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  // Config matching state — populated by /api/configs/match against the current input.
+  const [configMatches, setConfigMatches] = useState<ConfigMatch[] | null>(null);
 
   // ── Load backend config list once on mount. Each id loads on first selection.
   useEffect(() => {
@@ -179,6 +184,31 @@ export default function Page() {
     if (inputMode === "sample") return SAMPLE_DATASETS[datasetKey]?.source ?? "";
     return customSource.trim();
   }, [inputMode, datasetKey, customSource]);
+
+  // ── Ask the backend which registered configs apply to the current input.
+  // Debounced so paste/keystroke streams don't spam the endpoint. Failures
+  // hide the panel rather than surface noise — same forgiving pattern as
+  // listConfigs above.
+  useEffect(() => {
+    if (inputData == null) {
+      setConfigMatches(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      matchConfigs(inputData, sourceName || undefined)
+        .then((res) => {
+          if (!cancelled) setConfigMatches(res);
+        })
+        .catch(() => {
+          if (!cancelled) setConfigMatches(null);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [inputData, sourceName]);
 
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
@@ -317,6 +347,7 @@ export default function Page() {
             onLLMResult={onLLMResult}
             loading={adapterLoading}
             loadError={adapterError}
+            matches={configMatches}
           />
         )}
 

@@ -6,10 +6,10 @@ from typing import Any
 
 # services/gateway/prompts.py → backend/
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-CONFIGS_DIR = BACKEND_DIR / "configs"
+CONFIG_EXAMPLES_DIR = BACKEND_DIR / "configs" / "examples"
 CANONICAL_MODEL_PATH = BACKEND_DIR / "shared" / "models.py"
 
-FEW_SHOT_FILES = ["withings-body-scale.yaml", "app-usage-daily.yaml"]
+FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitbit-heart-rate.yaml"]
 
 MAX_SAMPLE_BYTES = 20_000
 
@@ -70,7 +70,7 @@ Return ONE YAML document — no markdown fencing, no preamble, no trailing comme
 def _load_few_shot() -> str:
     blocks: list[str] = []
     for name in FEW_SHOT_FILES:
-        p = CONFIGS_DIR / name
+        p = CONFIG_EXAMPLES_DIR / name
         if p.is_file():
             blocks.append(f"### Example: {name}\n\n```yaml\n{p.read_text(encoding='utf-8').strip()}\n```")
     return "\n\n".join(blocks)
