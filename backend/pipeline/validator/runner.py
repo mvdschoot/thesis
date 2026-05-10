@@ -1,19 +1,63 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from domain.models import CanonicalEvent, QualityFlag, Stage
 
 from .base import BaseValidator
+from .config import DEFAULT_VALIDATOR_ORDER, ValidateConfig
 from .payload_validator import PayloadValidator
 from .range_validator import RangeValidator
 from .required_fields import RequiredFieldsValidator
 from .timestamp_validator import TimestampValidator
 from .unit_validator import UnitValidator
 
+# Map the user-facing closed-enum names to validator classes.
+_VALIDATOR_FACTORY: dict[str, type[BaseValidator]] = {
+    "required_fields": RequiredFieldsValidator,
+    "timestamp_window": TimestampValidator,
+    "payload_shape": PayloadValidator,
+    "unit_whitelist": UnitValidator,
+    "range": RangeValidator,
+}
+
 
 def _flag_key(f: QualityFlag) -> tuple:
     return (f.code, f.stage, f.message)
+
+
+def _merge_rules(
+    global_rules: dict[str, Any], config: ValidateConfig | None
+) -> dict[str, Any]:
+    """Layer per-config overrides on top of the global quality_rules.yaml.
+
+    Shallow replace per-key inside `categories.<name>` — providing `range`
+    replaces the global range wholesale, providing `unit_whitelist`
+    replaces that list wholesale. Top-level `timestamp_window` likewise.
+    """
+    merged = copy.deepcopy(global_rules) or {}
+    if config is None:
+        return merged
+    if config.timestamp_window is not None:
+        merged["timestamp_window"] = dict(config.timestamp_window)
+    if config.categories:
+        cats = merged.setdefault("categories", {})
+        for cat_name, overrides in config.categories.items():
+            target = cats.setdefault(cat_name, {})
+            target.update(overrides)
+    return merged
+
+
+def _select_validators(config: ValidateConfig | None) -> list[BaseValidator]:
+    """Build the validator chain in canonical order, filtered by `enabled`.
+    Honour the canonical order regardless of how the user listed names."""
+    if config is None or config.enabled is None:
+        names = DEFAULT_VALIDATOR_ORDER
+    else:
+        enabled_set = set(config.enabled)
+        names = tuple(n for n in DEFAULT_VALIDATOR_ORDER if n in enabled_set)
+    return [_VALIDATOR_FACTORY[n]() for n in names]
 
 
 class ValidationRunner:
@@ -23,8 +67,6 @@ class ValidationRunner:
     be supplied via `event.extensions["_quality_override"]` (placed there by
     the adapter when a YAML emit-rule declares `quality_overrides:`).
     """
-
-    DEFAULT_VALIDATORS: list[BaseValidator]
 
     def __init__(
         self,
@@ -39,6 +81,17 @@ class ValidationRunner:
             UnitValidator(),
             RangeValidator(),
         ]
+
+    @classmethod
+    def from_config(
+        cls,
+        global_rules: dict[str, Any],
+        config: ValidateConfig | None,
+    ) -> "ValidationRunner":
+        return cls(
+            rules=_merge_rules(global_rules, config),
+            validators=_select_validators(config),
+        )
 
     def _category_rules(self, category: str) -> dict[str, Any]:
         merged: dict[str, Any] = {}

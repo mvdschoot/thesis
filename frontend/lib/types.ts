@@ -187,21 +187,25 @@ export interface AdapterEmitRule {
   quality_overrides?: Record<string, unknown>;
 }
 
-export interface AdapterConfig {
+export interface PipelineConfig {
   adapter: { id: string; version: string; description?: string };
   match: MatchBlock;
   defaults: DefaultsBlock;
   emit: AdapterEmitRule[];
+  // Optional stage-config blocks. Treated as opaque on the frontend — the
+  // backend is the source of truth for their shape. The editor preserves
+  // them losslessly through round-trip and the StageRulesPanel renders a
+  // read-only summary view sourced from them.
+  clean?: Record<string, unknown>;
+  validate?: Record<string, unknown>;
+  qualify?: Record<string, unknown>;
+  // Carry every other top-level YAML key the user (or LLM) included that we
+  // don't model explicitly — keeps round-trip lossless.
+  extra?: Record<string, unknown>;
 }
 
-// ─── Pipeline rules (frontend visualization only) ───────────────────────────
-
-export interface RuleToggle {
-  id: string;
-  name: string;
-  desc: string;
-  on: boolean;
-}
+/** @deprecated Use PipelineConfig. Kept as an alias during the transition. */
+export type AdapterConfig = PipelineConfig;
 
 // ─── Sample dataset shape (input-side mock) ─────────────────────────────────
 

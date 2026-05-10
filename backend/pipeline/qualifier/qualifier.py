@@ -5,6 +5,7 @@ from typing import Any
 from domain.models import CanonicalEvent, Severity, Stage
 
 from .completeness import compute_completeness
+from .config import DEFAULT_CHECK_ORDER, QualifyConfig
 from .duplicates import detect_duplicates
 from .outliers import detect_outliers
 
@@ -48,38 +49,72 @@ def _is_conformance_flag(code: str) -> bool:
 class Qualifier:
     """Cross-event judgement: completeness, duplicates, statistical outliers,
     and the final conformance + plausibility verdicts.
+
+    Per-config tunables (Hampel k, fingerprint fields, plausibility threshold)
+    layer on top of the global `quality_rules.yaml`. Per-config completeness
+    `expected_fields` likewise overlay the global category rules.
     """
 
-    def __init__(self, rules: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        rules: dict[str, Any] | None = None,
+        config: QualifyConfig | None = None,
+    ) -> None:
         self.rules: dict[str, Any] = rules or {}
-        thresholds = self.rules.get("plausibility_thresholds") or {}
-        self.warning_count_for_review: int = int(
-            thresholds.get("warning_count_for_review", 1)
-        )
+        self.config: QualifyConfig = config or QualifyConfig()
+        # Plausibility threshold: per-config block wins over the global default.
+        global_thresholds = (self.rules.get("plausibility_thresholds") or {})
+        if config is not None:
+            self.warning_count_for_review = self.config.plausibility.warning_count_for_review
+        else:
+            self.warning_count_for_review = int(
+                global_thresholds.get("warning_count_for_review", 1)
+            )
+        if self.config.enabled is None:
+            self._enabled = set(DEFAULT_CHECK_ORDER)
+        else:
+            self._enabled = set(self.config.enabled)
 
     def _category_rules(self, category: str) -> dict[str, Any]:
-        return (self.rules.get("categories") or {}).get(category) or {}
+        merged: dict[str, Any] = dict(
+            (self.rules.get("categories") or {}).get(category) or {}
+        )
+        # Per-config completeness overlay for this category's expected_fields.
+        override_fields = self.config.completeness.expected_fields.get(category)
+        if override_fields is not None:
+            merged["expected_fields"] = list(override_fields)
+        return merged
 
     def apply_all(self, events: list[CanonicalEvent]) -> list[CanonicalEvent]:
-        for event in events:
-            ratio, present, expected = compute_completeness(
-                event, self._category_rules(event.category)
+        if "completeness" in self._enabled:
+            for event in events:
+                ratio, present, expected = compute_completeness(
+                    event, self._category_rules(event.category)
+                )
+                event.quality.completeness = ratio
+                event.quality.present_field_count = present
+                event.quality.expected_field_count = expected
+
+        if "duplicates" in self._enabled:
+            detect_duplicates(
+                events,
+                fields=self.config.duplicates.fields,
+                value_round_digits=self.config.duplicates.value_round_digits,
             )
-            event.quality.completeness = ratio
-            event.quality.present_field_count = present
-            event.quality.expected_field_count = expected
 
-        detect_duplicates(events)
-        detect_outliers(events)
+        if "outliers" in self._enabled:
+            detect_outliers(
+                events,
+                hampel_k=self.config.outliers.hampel_k,
+                min_group_size=self.config.outliers.min_group_size,
+            )
 
         for event in events:
-            self._assign_conformance(event)
-            self._assign_plausibility(event)
+            if "conformance" in self._enabled:
+                self._assign_conformance(event)
+            if "plausibility" in self._enabled:
+                self._assign_plausibility(event)
             event.stage = Stage.QUALIFIED
-            if event.extensions and "_quality_override" in event.extensions:
-                del event.extensions["_quality_override"]
-                if not event.extensions:
-                    event.extensions = None
 
         return events
 

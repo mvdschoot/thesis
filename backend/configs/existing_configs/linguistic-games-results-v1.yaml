@@ -74,3 +74,19 @@ emit:
           severity: "warning"
           stage: "structured"
           message: "Result state is missing or unspecified."
+
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+    - unit_inferrer
+
+validate:
+  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+
+qualify:
+  enabled: [completeness, duplicates, outliers, conformance, plausibility]
+  outliers:    { hampel_k: 3.5, min_group_size: 5 }
+  duplicates:  { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
+  plausibility: { warning_count_for_review: 1 }

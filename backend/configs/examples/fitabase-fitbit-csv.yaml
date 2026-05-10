@@ -1,7 +1,7 @@
 adapter:
-  id: "fitbit-hourly-intensity-v1"
+  id: "fitabase-fitbit-hourly-intensity-v1"
   version: "1.0.0"
-  description: "Fitbit hourly total and average intensity records; emits one event per row with intensity values in METs."
+  description: "Fitabase Fitbit export (CSV) — hourly intensity rows. Demonstrates parse_timestamp + a per-config range override + the cleaner/validator/qualifier blocks."
 
 match:
   source: "fitbit"
@@ -9,7 +9,6 @@ match:
     - { field: "Id", exists: true }
     - { field: "ActivityHour", exists: true }
     - { field: "TotalIntensity", exists: true }
-    - { field: "AverageIntensity", exists: true }
 
 defaults:
   subject_id: { path: "Id" }
@@ -24,35 +23,28 @@ defaults:
 
 emit:
   - id: "hourly-intensity"
-    description: "Hourly Fitbit intensity summary with total and average intensity in METs"
+    description: "Fitabase hourly intensity row. Timestamp in column ActivityHour is non-ISO and needs an explicit strptime format."
     type: "measurement"
     category: "activity-intensity"
     granularity: "interval"
     timestamp:
       start: { path: "ActivityHour", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
-      end:
-        fallback:
-          path: "ActivityHour"
-          fallback: { path: "ActivityHour", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
       duration_seconds: 3600
     payload:
-      value: { path: "TotalIntensity", to_float: true }
-      raw_value:
-        template: "total={TotalIntensity};average={AverageIntensity}"
+      value: { path: "TotalIntensity" }
+      raw_value: { path: "TotalIntensity" }
       unit: "MET"
       label: "TotalIntensity"
       components:
-        - name: "total_intensity"
-          value: { path: "TotalIntensity", to_float: true }
-          unit: "MET"
         - name: "average_intensity"
-          value: { path: "AverageIntensity", to_float: true }
+          value: { path: "AverageIntensity" }
           unit: "MET"
-    extensions:
-      fitbit.totalIntensity: { path: "TotalIntensity", to_float: true }
-      fitbit.averageIntensity: { path: "AverageIntensity", to_float: true }
 
 clean:
+  # The CSV connector hands every column over as a string, so the
+  # type_coercer below promotes TotalIntensity / AverageIntensity to
+  # numeric. The timestamp normalizer's accept_formats covers the
+  # explicit strptime path the adapter already applied (defensive).
   heuristics:
     - whitespace
     - { name: timestamp_normalizer, accept_formats: ["%m/%d/%Y %I:%M:%S %p"] }
@@ -61,6 +53,15 @@ clean:
 
 validate:
   enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+  # Fitabase exports start in 2016 in the canonical research dataset.
+  timestamp_window: { min: "2014-01-01", max: "now+1d" }
+  categories:
+    activity-intensity:
+      unit_whitelist: ["MET"]
+      range:
+        min: 0
+        max: 50
+        on_violation: { severity: "warning", code: "INTENSITY_OUT_OF_RANGE" }
 
 qualify:
   enabled: [completeness, duplicates, outliers, conformance, plausibility]

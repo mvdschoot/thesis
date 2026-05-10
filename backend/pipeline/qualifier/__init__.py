@@ -12,18 +12,21 @@ from typing import Any
 from domain.models import CanonicalEvent
 from domain.rules import load_rules
 
+from .config import QualifyConfig
 from .qualifier import Qualifier
 
-__all__ = ["Qualifier", "run"]
+__all__ = ["Qualifier", "QualifyConfig", "run"]
 
 logger = logging.getLogger("pipeline.qualifier")
 
-_RULES = load_rules()
-_QUALIFIER = Qualifier(rules=_RULES)
 
-
-def run(events: list[CanonicalEvent]) -> tuple[list[CanonicalEvent], dict[str, Any]]:
-    qualified = _QUALIFIER.apply_all(events)
+def run(
+    events: list[CanonicalEvent],
+    *,
+    config: QualifyConfig | None = None,
+) -> tuple[list[CanonicalEvent], dict[str, Any]]:
+    qualifier = Qualifier(rules=load_rules(), config=config)
+    qualified = qualifier.apply_all(events)
     event_dicts = [e.to_dict() for e in qualified]
     logger.info("qualifier processed %d events", len(qualified))
     return qualified, _stats(event_dicts)

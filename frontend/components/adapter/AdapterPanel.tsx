@@ -20,13 +20,15 @@ interface Props {
   onChange: (next: AdapterConfig) => void;
   configKey: string;
   setConfigKey: (k: string) => void;
-  configIds: string[];
   inputData: unknown | null;
   source: string;
   onLLMResult: (yamlText: string, configId: string) => void;
   loading?: boolean;
   loadError?: string | null;
   matches?: ConfigMatch[] | null;
+  /** Show the YAML editor on first render (used when StageRulesPanel sends
+   * the user here to edit a non-adapter section). */
+  initialYamlMode?: boolean;
 }
 
 export default function AdapterPanel({
@@ -34,16 +36,16 @@ export default function AdapterPanel({
   onChange,
   configKey,
   setConfigKey,
-  configIds,
   inputData,
   source,
   onLLMResult,
   loading,
   loadError,
   matches,
+  initialYamlMode,
 }: Props) {
   const [tab, setTab] = useState<Tab>("match");
-  const [showYaml, setShowYaml] = useState(false);
+  const [showYaml, setShowYaml] = useState(initialYamlMode === true);
   const [emitIdx, setEmitIdx] = useState(0);
   const [showLLM, setShowLLM] = useState(false);
 
@@ -118,34 +120,17 @@ export default function AdapterPanel({
         Pick an existing one, edit it visually, or generate a new config with an LLM from a record.
       </p>
 
-      <div className="row" style={{ marginTop: 20, alignItems: "end" }}>
-        <div className="field" style={{ flex: 2 }}>
-          <label>Adapter config</label>
-          <select
-            className="select"
-            value={configKey}
-            onChange={(e) => setConfigKey(e.target.value)}
-            disabled={configIds.length === 0}
-          >
-            {configIds.length === 0 && <option value="">No configs available</option>}
-            {configIds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-          {loading && (
-            <div className="help" style={{ marginTop: 4 }}>
-              Loading…
-            </div>
-          )}
-          {loadError && (
-            <div className="help" style={{ color: "var(--err)" }}>
-              {loadError}
-            </div>
-          )}
+      <div className="row" style={{ marginTop: 20, alignItems: "center", gap: 12 }}>
+        <div className="muted" style={{ fontSize: 12, flex: 1 }}>
+          {loading
+            ? "Loading config…"
+            : loadError
+            ? loadError
+            : configKey
+            ? `Editing ${configKey}.yaml`
+            : "Pick a config from the topbar to start."}
         </div>
-        <div style={{ flex: 0, display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={() => setShowLLM(true)}>
             <span
               style={{

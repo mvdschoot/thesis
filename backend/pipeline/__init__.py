@@ -4,16 +4,34 @@ Chains the five harmonization stages — connector, adapter, cleaner,
 validator, qualifier — as plain in-process Python calls. Each stage is a
 subpackage exposing a single `run(...)` function; this module wires them
 together so the API layer can invoke the whole pipeline with one call.
+
+The YAML config is parsed once here so the cleaner / validator / qualifier
+blocks can be forwarded as kwargs to the matching stages.
 """
 from __future__ import annotations
 
 from typing import Any
 
+import yaml
+
 from domain.models import CanonicalEvent
 
 from . import adapter, cleaner, connector, qualifier, validator
+from .adapter.config_adapter import ConfigAdapter
 
 __all__ = ["run_pipeline"]
+
+
+def _strip_quality_overrides(events: list[CanonicalEvent]) -> None:
+    """Remove the `_quality_override` extension key the adapter writes for
+    per-rule overrides. Runs after the qualifier today; lifted up here so
+    cleanup still happens when the qualifier is disabled via `qualify.enabled`.
+    """
+    for event in events:
+        if event.extensions and "_quality_override" in event.extensions:
+            del event.extensions["_quality_override"]
+            if not event.extensions:
+                event.extensions = None
 
 
 def run_pipeline(
@@ -25,9 +43,15 @@ def run_pipeline(
     device: str | None = None,
 ) -> tuple[list[CanonicalEvent], dict[str, Any]]:
     """Run a record (or batch) through every stage and return (events, stats)."""
+    parsed = yaml.safe_load(yaml_text) or {}
+    if not isinstance(parsed, dict):
+        raise ValueError("YAML must be a mapping at the top level.")
+    config_adapter = ConfigAdapter.from_dict(parsed)
+
     metadata, records = connector.run(data, format=format, source=source, device=device)
-    structured = adapter.run(records, metadata=metadata, yaml_text=yaml_text)
-    cleaned = cleaner.run(structured)
-    validated = validator.run(cleaned)
-    qualified, stats = qualifier.run(validated)
+    structured = adapter.run(records, metadata=metadata, adapter=config_adapter)
+    cleaned = cleaner.run(structured, config=config_adapter.clean_block)
+    validated = validator.run(cleaned, config=config_adapter.validate_block)
+    qualified, stats = qualifier.run(validated, config=config_adapter.qualify_block)
+    _strip_quality_overrides(qualified)
     return qualified, stats

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 from domain.models import CanonicalEvent, QualityFlag, Severity
 
@@ -11,7 +12,17 @@ DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class TimestampNormalizer(BaseHeuristic):
-    """Detects and normalizes various timestamp formats to ISO 8601 with Z suffix."""
+    """Detects and normalizes various timestamp formats to ISO 8601 with Z suffix.
+
+    `accept_formats` extends the built-in ISO/date-only handling with
+    user-supplied strptime patterns (e.g. "%m/%d/%Y %I:%M:%S %p"). The
+    sentinels "iso" and "date" can also appear in the list — they map back
+    to the built-in regex paths and are present so configs can express
+    "only accept ISO" by listing them explicitly.
+    """
+
+    def __init__(self, accept_formats: list[str] | None = None) -> None:
+        self._accept_formats: list[str] = list(accept_formats) if accept_formats else []
 
     @property
     def name(self) -> str:
@@ -53,5 +64,28 @@ class TimestampNormalizer(BaseHeuristic):
                 )
             )
             return ts + "T00:00:00.000Z"
+
+        for fmt in self._accept_formats:
+            if fmt in ("iso", "date"):
+                continue
+            try:
+                parsed = datetime.strptime(ts, fmt)
+            except (ValueError, TypeError):
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+            millis = parsed.microsecond // 1000
+            normalized = parsed.strftime("%Y-%m-%dT%H:%M:%S.") + f"{millis:03d}Z"
+            event.quality.flags.append(
+                QualityFlag(
+                    code="TIMESTAMP_FORMAT_PARSED",
+                    severity=Severity.INFO,
+                    stage="cleaned",
+                    message=f"{field}: parsed with format {fmt!r}",
+                )
+            )
+            return normalized
 
         return ts

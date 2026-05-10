@@ -9,7 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 CONFIG_EXAMPLES_DIR = BACKEND_DIR / "configs" / "examples"
 CANONICAL_MODEL_PATH = BACKEND_DIR / "domain" / "models.py"
 
-FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitbit-heart-rate.yaml"]
+FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitabase-fitbit-csv.yaml"]
 
 MAX_SAMPLE_BYTES = 20_000
 
@@ -29,6 +29,9 @@ Top-level sections:
       - `non_empty: true`      — arrays/strings/objects must have length > 0
 - `defaults` (optional): { subject_id, context, stage, source_record_id } — applied to every emitted event.
 - `emit`: a list of rules. Each rule produces 0..n events per input record.
+- `clean` (optional): cleaner chain composition + per-heuristic params. Omitted → default chain.
+- `validate` (optional): which validators run + per-category overlay on top of the global quality_rules.yaml. Omitted → all validators, global rules.
+- `qualify` (optional): which cross-event checks run + tunables (Hampel k, fingerprint fields, plausibility threshold). Omitted → all checks with defaults.
 
 Match-block rigidity (MANDATORY):
 - Do NOT rely on `match.source` alone — that lets the engine try to transform records you can't actually handle. For every config you generate, the `record` list MUST:
@@ -69,6 +72,35 @@ Rule structure:
 - quality: { flags: [...] }. Each flag is either an unconditional `{ code, severity, stage, message }` or a conditional `{ condition: { path, equals }, code, severity, stage, message }`.
 
 If the source has no per-record timestamp at all, declare a literal ISO-8601 string at `timestamp.start` and add an unconditional `SYNTHETIC_TIMESTAMP` quality flag.
+
+Cleaner block (`clean`):
+- `heuristics`: ordered list, each entry either a name string or `{ name, ...params }`. Closed enum:
+    - `whitespace` — strip leading/trailing whitespace on string fields. No params.
+    - `timestamp_normalizer` — normalize timestamps to ISO 8601 UTC. Params: `accept_formats: ["%m/%d/%Y %I:%M:%S %p", ...]` (strptime format strings tried in order after the built-in ISO/date-only handling).
+    - `type_coercer` — coerce numeric strings on payload.value and components. No params.
+    - `unit_inferrer` — fill `payload.unit` when the adapter left it null. Params: `mappings: { "<source>|<category>": "<unit>", ... }`.
+- Listing only a subset of names (or omitting some) means the others are skipped. Order in the list is the order of execution.
+- Default chain when `clean` is omitted: whitespace → timestamp_normalizer → type_coercer → unit_inferrer (each with defaults).
+
+Validator block (`validate`):
+- `enabled`: subset of `[required_fields, timestamp_window, payload_shape, unit_whitelist, range]`. Canonical order is preserved regardless of the order you list. Omit `enabled` to run all five.
+- `timestamp_window: { min, max }` — overrides the global `timestamp_window`. Accepts ISO strings or `now+Xd`/`now-Xh`.
+- `categories.<canonical_category>:` per-category overlay on top of the global quality_rules.yaml. Each per-category key is a SHALLOW REPLACE — providing `range` replaces the global range wholesale; providing `unit_whitelist` replaces that list wholesale; same for `expected_fields`.
+    - `expected_fields: [<dotted-paths>]` — fields the qualifier's completeness check will look for.
+    - `unit_whitelist: [<unit-strings>]` — values `payload.unit` may take. Otherwise emits `UNIT_NOT_IN_WHITELIST` (warning).
+    - `range: { min, max, on_violation: { severity, code } }` — numeric range on `payload.value`. `severity ∈ {info, warning, error}`. `code` is the QualityFlag.code emitted on violation.
+
+Qualifier block (`qualify`):
+- `enabled`: subset of `[completeness, duplicates, outliers, conformance, plausibility]`. Omit to run all five.
+- `outliers: { hampel_k: 3.5, min_group_size: 5 }` — Hampel test (median ± k·MAD) per `(subject_id, category)`. Lowering k flags more events; raising it flags fewer. Lowering `min_group_size` makes the test more aggressive on sparse data — only do this with statistical justification, since MAD collapses to 0 on tiny groups.
+- `duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }` — the fingerprint over which to detect duplicates. `fields` accepts any dotted path on the canonical event.
+- `plausibility: { warning_count_for_review: 1 }` — number of WARNING flags after which `quality.plausibility` becomes `"review"`. Any ERROR forces `"exclude"` regardless.
+- `completeness: { expected_fields: { <category>: [<paths>] } }` — overrides per-category expected_fields when computing the completeness ratio.
+
+Defaults & omission rule:
+- Every block, every nested key, every parameter is optional. Omitted = current default behavior.
+- If you cannot infer a parameter from the input sample, OMIT it. Do not invent thresholds. The defaults are statistically defensible and match the existing pipeline behavior.
+- Only emit a per-category override under `validate.categories` when the source genuinely needs to deviate from the global `quality_rules.yaml` (e.g. a new unit or a different range). Otherwise leave the global rule in charge.
 
 Return ONE YAML document — no markdown fencing, no preamble, no trailing commentary. Only the YAML.
 """

@@ -21,12 +21,20 @@ def run(
     records: list[dict[str, Any]],
     *,
     metadata: SourceMetadata,
-    yaml_text: str,
+    yaml_text: str | None = None,
+    adapter: ConfigAdapter | None = None,
 ) -> list[CanonicalEvent]:
-    parsed = yaml.safe_load(yaml_text) or {}
-    if not isinstance(parsed, dict):
-        raise ValueError("YAML must be a mapping at the top level.")
-    adapter = ConfigAdapter.from_dict(parsed)
+    """Run the adapter against `records`. Accepts either pre-parsed
+    `adapter` (preferred — caller can reuse it for clean/validate/qualify
+    blocks) or raw `yaml_text` for standalone use.
+    """
+    if adapter is None:
+        if yaml_text is None:
+            raise ValueError("adapter.run requires either `adapter` or `yaml_text`")
+        parsed = yaml.safe_load(yaml_text) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError("YAML must be a mapping at the top level.")
+        adapter = ConfigAdapter.from_dict(parsed)
     registry = AdapterRegistry()
     registry.register(adapter)
 

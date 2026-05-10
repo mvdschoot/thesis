@@ -109,3 +109,21 @@ emit:
           severity: "warning"
           stage: "structured"
           message: "Withings flagged subject attribution as ambiguous (attrib=1)"
+
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+    - { name: unit_inferrer, mappings: { "withings|body-water": "kg" } }
+
+validate:
+  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+  # Withings measurements span back to roughly 2010 for some accounts.
+  timestamp_window: { min: "2010-01-01", max: "now+1d" }
+
+qualify:
+  enabled: [completeness, duplicates, outliers, conformance, plausibility]
+  outliers:    { hampel_k: 3.5, min_group_size: 5 }
+  duplicates:  { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
+  plausibility: { warning_count_for_review: 1 }

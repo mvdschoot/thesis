@@ -7,17 +7,20 @@ from domain.models import CanonicalEvent
 from domain.rules import load_rules
 
 from .base import BaseValidator
+from .config import ValidateConfig
 from .runner import ValidationRunner
 
-__all__ = ["BaseValidator", "ValidationRunner", "run"]
+__all__ = ["BaseValidator", "ValidateConfig", "ValidationRunner", "run"]
 
 logger = logging.getLogger("pipeline.validator")
 
-_RULES = load_rules()
-_RUNNER = ValidationRunner(rules=_RULES)
 
-
-def run(events: list[CanonicalEvent]) -> list[CanonicalEvent]:
-    validated = _RUNNER.apply_all(events)
+def run(
+    events: list[CanonicalEvent],
+    *,
+    config: ValidateConfig | None = None,
+) -> list[CanonicalEvent]:
+    runner = ValidationRunner.from_config(load_rules(), config)
+    validated = runner.apply_all(events)
     logger.info("validator processed %d events", len(validated))
     return validated

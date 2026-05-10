@@ -32,6 +32,10 @@ from domain.models import (
     Stage,
 )
 
+from pipeline.cleaner.config import CleanConfig
+from pipeline.qualifier.config import QualifyConfig
+from pipeline.validator.config import ValidateConfig
+
 from .base import BaseAdapter
 
 logger = logging.getLogger(__name__)
@@ -291,6 +295,11 @@ class ConfigAdapter(BaseAdapter):
         self._match = self._config["match"]
         self._defaults = self._config.get("defaults", {})
         self._rules = self._config["emit"]
+        # New optional sibling sections — None when omitted, in which case the
+        # corresponding stage falls back to its current default behavior.
+        self._clean_block = CleanConfig.from_dict(self._config.get("clean"))
+        self._validate_block = ValidateConfig.from_dict(self._config.get("validate"))
+        self._qualify_block = QualifyConfig.from_dict(self._config.get("qualify"))
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]) -> "ConfigAdapter":
@@ -307,6 +316,18 @@ class ConfigAdapter(BaseAdapter):
     @property
     def version(self) -> str:
         return self._adapter_info["version"]
+
+    @property
+    def clean_block(self) -> CleanConfig | None:
+        return self._clean_block
+
+    @property
+    def validate_block(self) -> ValidateConfig | None:
+        return self._validate_block
+
+    @property
+    def qualify_block(self) -> QualifyConfig | None:
+        return self._qualify_block
 
     def can_handle(self, metadata: SourceMetadata, record: dict[str, Any]) -> bool:
         for condition in self._match.get("record", []):

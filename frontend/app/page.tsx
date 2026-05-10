@@ -18,7 +18,7 @@ import {
   type TransformFormat,
   type TransformResponse,
 } from "@/lib/api";
-import { CLEANER_RULES, QUALIFIER_RULES, VALIDATOR_RULES } from "@/lib/rules";
+import { summarizeClean, summarizeQualify, summarizeValidate } from "@/lib/rules";
 import { SAMPLE_CONFIGS, SAMPLE_DATASETS, SIMULATED_EVENTS } from "@/lib/sampleData";
 import type { AdapterConfig, CanonicalEvent } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
@@ -53,10 +53,9 @@ export default function Page() {
   // Stage navigation
   const [activeStage, setActiveStage] = useState<string>("connector");
 
-  // Rule visualization (per-stage toggles — currently cosmetic)
-  const [cleanerRules, setCleanerRules] = useState(CLEANER_RULES);
-  const [validatorRules, setValidatorRules] = useState(VALIDATOR_RULES);
-  const [qualifierRules, setQualifierRules] = useState(QUALIFIER_RULES);
+  // When the user clicks "Edit in YAML →" inside a StageRulesPanel we hop to
+  // the adapter stage and ask it to start in YAML mode.
+  const [adapterYamlIntent, setAdapterYamlIntent] = useState(0);
 
   // Run state
   const [runResult, setRunResult] = useState<TransformResponse | null>(null);
@@ -220,6 +219,10 @@ export default function Page() {
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
 
+  const cleanSummary = useMemo(() => summarizeClean(config), [config]);
+  const validateSummary = useMemo(() => summarizeValidate(config), [config]);
+  const qualifySummary = useMemo(() => summarizeQualify(config), [config]);
+
   const stageDefs: StageDef[] = useMemo(() => {
     const total = events.length;
     const warn = events.reduce(
@@ -231,6 +234,9 @@ export default function Page() {
       0,
     );
     const emitCount = config?.emit.length ?? 0;
+    const cleanOn = cleanSummary.filter((r) => r.enabled).length;
+    const validateOn = validateSummary.filter((r) => r.enabled).length;
+    const qualifyOn = qualifySummary.filter((r) => r.enabled).length;
     // Strip stays at 5 stages to match the CSS grid (Results is reached via prev/next nav).
     return [
       {
@@ -253,7 +259,7 @@ export default function Page() {
         id: "cleaning",
         label: "Cleaner",
         count: total,
-        note: `${cleanerRules.filter((r) => r.on).length}/${cleanerRules.length} rules on`,
+        note: `${cleanOn}/${cleanSummary.length} rules on`,
         done: ["validation", "qualification", "results"].includes(activeStage),
         pulse: activeStage === "cleaning",
       },
@@ -261,7 +267,7 @@ export default function Page() {
         id: "validation",
         label: "Validator",
         count: total,
-        note: `${validatorRules.filter((r) => r.on).length}/${validatorRules.length} rules on`,
+        note: `${validateOn}/${validateSummary.length} rules on`,
         warn,
         done: ["qualification", "results"].includes(activeStage),
         pulse: activeStage === "validation",
@@ -270,14 +276,14 @@ export default function Page() {
         id: "qualification",
         label: "Qualifier",
         count: total,
-        note: `${qualifierRules.filter((r) => r.on).length}/${qualifierRules.length} rules on`,
+        note: `${qualifyOn}/${qualifySummary.length} rules on`,
         warn,
         err,
         done: activeStage === "results",
         pulse: activeStage === "qualification",
       },
     ];
-  }, [events, activeStage, config, cleanerRules, validatorRules, qualifierRules]);
+  }, [events, activeStage, config, cleanSummary, validateSummary, qualifySummary]);
 
   const canRun = inputData != null && config != null;
 
@@ -310,9 +316,32 @@ export default function Page() {
     return Array.from(merged);
   }, [backendIds]);
 
+  // Hop the user to the YAML editor on the adapter stage with a fresh intent
+  // counter so AdapterPanel re-mounts in YAML mode every time.
+  const editYaml = () => {
+    setAdapterYamlIntent((n) => n + 1);
+    setActiveStage("adapter");
+  };
+
+  const configHint = config
+    ? `${config.match.source || "—"} · ${config.emit.length} emit rule${
+        config.emit.length === 1 ? "" : "s"
+      }`
+    : adapterLoading
+    ? "Loading…"
+    : undefined;
+
   return (
     <div className="app">
-      <Topbar onRun={handleRun} running={running} canRun={canRun} />
+      <Topbar
+        onRun={handleRun}
+        running={running}
+        canRun={canRun}
+        configKey={configKey}
+        setConfigKey={setConfigKey}
+        configIds={configIds}
+        configHint={configHint}
+      />
       <StageStrip stages={stageDefs} active={activeStage} onJump={setActiveStage} />
 
       <div className="main">
@@ -344,17 +373,18 @@ export default function Page() {
 
         {activeStage === "adapter" && (
           <AdapterPanel
+            key={`adapter-${adapterYamlIntent}`}
             config={config}
             onChange={setConfig}
             configKey={configKey}
             setConfigKey={setConfigKey}
-            configIds={configIds}
             inputData={inputData}
             source={sourceName}
             onLLMResult={onLLMResult}
             loading={adapterLoading}
             loadError={adapterError}
             matches={configMatches}
+            initialYamlMode={adapterYamlIntent > 0}
           />
         )}
 
@@ -363,8 +393,9 @@ export default function Page() {
             title="Cleaner"
             eyebrow="Stage 03 · Heuristic cleaning"
             blurb="Whitespace strip → Timestamp normalize → Type coerce → Unit infer. Each heuristic mutates the event in place; fail-soft, no flags raised. Stage advances to CLEANED."
-            rules={cleanerRules}
-            setRules={setCleanerRules}
+            summary={cleanSummary}
+            sectionKey="clean"
+            onEditYaml={editYaml}
             sample={SAMPLE_RAW}
             sampleAfter={SAMPLE_CLEANED}
           />
@@ -375,8 +406,9 @@ export default function Page() {
             title="Validator"
             eyebrow="Stage 04 · Assertions only"
             blurb="Validators ASSERT — they never mutate. Each returns a list of QualityFlags; the runner appends and de-dups against adapter-declared flags. Failed validation events are tagged, not dropped."
-            rules={validatorRules}
-            setRules={setValidatorRules}
+            summary={validateSummary}
+            sectionKey="validate"
+            onEditYaml={editYaml}
             sample={SAMPLE_CLEANED}
             sampleAfter={SAMPLE_VALIDATED}
             sampleFlags={[
@@ -395,8 +427,9 @@ export default function Page() {
             title="Qualifier"
             eyebrow="Stage 05 · Cross-event quality"
             blurb="Operates over the request's events as a batch. Computes completeness, fingerprints duplicates, and runs Hampel outlier (median ± 3.5·MAD per (subject_id, category), min n=5). Derives conformance + plausibility."
-            rules={qualifierRules}
-            setRules={setQualifierRules}
+            summary={qualifySummary}
+            sectionKey="qualify"
+            onEditYaml={editYaml}
             sample={SAMPLE_VALIDATED}
             sampleAfter={SAMPLE_QUALIFIED}
             sampleFlags={[

@@ -22,14 +22,31 @@ DEFAULT_UNITS: dict[tuple[str, str], str] = {
 
 
 class UnitInferrer(BaseHeuristic):
-    """Infers units from source + category when the adapter hasn't set them."""
+    """Infers units from source + category when the adapter hasn't set them.
+
+    YAML configs supply additional mappings via `mappings`, keyed by a
+    pipe-delimited "source|category" string (e.g. "withings|weight": "kg").
+    `extra_mappings` retains the original tuple-keyed form for in-process
+    callers.
+    """
 
     def __init__(
-        self, extra_mappings: dict[tuple[str, str], str] | None = None
+        self,
+        extra_mappings: dict[tuple[str, str], str] | None = None,
+        *,
+        mappings: dict[str, str] | None = None,
     ) -> None:
         self._units = dict(DEFAULT_UNITS)
         if extra_mappings:
             self._units.update(extra_mappings)
+        if mappings:
+            for key, unit in mappings.items():
+                if "|" not in key:
+                    raise ValueError(
+                        f"unit_inferrer.mappings key {key!r} must be 'source|category'"
+                    )
+                source, category = key.split("|", 1)
+                self._units[(source, category)] = unit
 
     @property
     def name(self) -> str:

@@ -7,6 +7,7 @@ from domain.models import CanonicalEvent
 
 from .base import BaseHeuristic, HeuristicChain
 from .cleaner import Cleaner
+from .config import CleanConfig
 from .coercion import TypeCoercer
 from .timestamp import TimestampNormalizer
 from .units import UnitInferrer
@@ -16,6 +17,7 @@ __all__ = [
     "BaseHeuristic",
     "HeuristicChain",
     "Cleaner",
+    "CleanConfig",
     "TypeCoercer",
     "TimestampNormalizer",
     "UnitInferrer",
@@ -25,10 +27,13 @@ __all__ = [
 
 logger = logging.getLogger("pipeline.cleaner")
 
-_CLEANER = Cleaner()
 
-
-def run(events: list[CanonicalEvent]) -> list[CanonicalEvent]:
-    cleaned = _CLEANER.apply_all(events)
+def run(
+    events: list[CanonicalEvent],
+    *,
+    config: CleanConfig | None = None,
+) -> list[CanonicalEvent]:
+    cleaner = Cleaner.from_config(config)
+    cleaned = cleaner.apply_all(events)
     logger.info("cleaner processed %d events", len(cleaned))
     return cleaned

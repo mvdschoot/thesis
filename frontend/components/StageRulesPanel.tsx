@@ -1,7 +1,8 @@
 "use client";
 
 import { cx } from "@/lib/cx";
-import type { QualityFlag, RuleToggle } from "@/lib/types";
+import type { RuleSummary } from "@/lib/rules";
+import type { QualityFlag } from "@/lib/types";
 
 interface Sample {
   category?: string;
@@ -12,8 +13,11 @@ interface Props {
   title: string;
   eyebrow: string;
   blurb: string;
-  rules: RuleToggle[];
-  setRules: (next: RuleToggle[]) => void;
+  /** Read-only projection of the active config's stage section. */
+  summary: RuleSummary[];
+  /** Top-level YAML key the user would edit to change this stage. */
+  sectionKey: "clean" | "validate" | "qualify";
+  onEditYaml?: () => void;
   sample: Sample;
   sampleAfter: Sample;
   sampleFlags?: QualityFlag[];
@@ -23,14 +27,14 @@ export default function StageRulesPanel({
   title,
   eyebrow,
   blurb,
-  rules,
-  setRules,
+  summary,
+  sectionKey,
+  onEditYaml,
   sample,
   sampleAfter,
   sampleFlags,
 }: Props) {
-  const toggle = (id: string) =>
-    setRules(rules.map((r) => (r.id === id ? { ...r, on: !r.on } : r)));
+  const enabledCount = summary.filter((r) => r.enabled).length;
 
   return (
     <div>
@@ -44,33 +48,52 @@ export default function StageRulesPanel({
         <div className="card">
           <div className="card-head">
             <span className="eyebrow">
-              Active rules · {rules.filter((r) => r.on).length} of {rules.length}
+              Active rules · {enabledCount} of {summary.length} ·{" "}
+              <span className="mono">{sectionKey}</span> block
             </span>
+            {onEditYaml && (
+              <button
+                className="btn"
+                onClick={onEditYaml}
+                style={{ marginLeft: "auto" }}
+                title={`Edit the ${sectionKey} block in the YAML editor`}
+              >
+                Edit in YAML →
+              </button>
+            )}
           </div>
           <div className="card-body" style={{ padding: 0 }}>
-            {rules.map((r) => (
+            {summary.map((r) => (
               <div
-                key={r.id}
+                key={r.name}
                 style={{
                   padding: "14px 18px",
                   borderBottom: "1px solid var(--line-2)",
                   display: "flex",
                   alignItems: "flex-start",
                   gap: 14,
+                  opacity: r.enabled ? 1 : 0.55,
                 }}
               >
-                <div
-                  className={cx("switch", r.on && "on")}
-                  onClick={() => toggle(r.id)}
-                />
-                <div style={{ flex: 1 }}>
+                <div className={cx("switch", r.enabled && "on")} />
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 500 }}>{r.name}</span>
-                    <span className="chip mono">{r.id}</span>
+                    <span style={{ fontWeight: 500 }}>{r.label}</span>
+                    <span className="chip mono">{r.name}</span>
+                    {!r.enabled && (
+                      <span className="chip" style={{ color: "var(--muted)" }}>
+                        disabled
+                      </span>
+                    )}
                   </div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {r.desc}
-                  </div>
+                  {r.params && (
+                    <pre
+                      className="code-pre"
+                      style={{ fontSize: 11, marginTop: 6, maxHeight: 110 }}
+                    >
+                      {JSON.stringify(r.params, null, 2)}
+                    </pre>
+                  )}
                 </div>
               </div>
             ))}

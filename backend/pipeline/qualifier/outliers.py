@@ -5,8 +5,8 @@ from statistics import median
 
 from domain.models import CanonicalEvent, QualityFlag, Severity
 
-_HAMPEL_THRESHOLD = 3.5  # number of MADs from the median
-_MIN_GROUP_SIZE = 5
+DEFAULT_HAMPEL_THRESHOLD = 3.5  # number of MADs from the median
+DEFAULT_MIN_GROUP_SIZE = 5
 
 
 def _numeric(value: object) -> float | None:
@@ -17,10 +17,15 @@ def _numeric(value: object) -> float | None:
     return None
 
 
-def detect_outliers(events: list[CanonicalEvent]) -> None:
+def detect_outliers(
+    events: list[CanonicalEvent],
+    *,
+    hampel_k: float = DEFAULT_HAMPEL_THRESHOLD,
+    min_group_size: int = DEFAULT_MIN_GROUP_SIZE,
+) -> None:
     """Hampel test per (subject_id, category) group on payload.value.
 
-    Skips groups with fewer than _MIN_GROUP_SIZE numeric values; emits
+    Skips groups with fewer than `min_group_size` numeric values; emits
     OUTLIER_INSUFFICIENT_DATA (info) on the first event of such groups.
     """
     groups: dict[tuple[str, str], list[tuple[CanonicalEvent, float]]] = defaultdict(list)
@@ -31,7 +36,7 @@ def detect_outliers(events: list[CanonicalEvent]) -> None:
         groups[(event.subject_id, event.category)].append((event, v))
 
     for key, members in groups.items():
-        if len(members) < _MIN_GROUP_SIZE:
+        if len(members) < min_group_size:
             members[0][0].quality.flags.append(
                 QualityFlag(
                     code="OUTLIER_INSUFFICIENT_DATA",
@@ -51,12 +56,12 @@ def detect_outliers(events: list[CanonicalEvent]) -> None:
 
         for event, v in members:
             score = abs(v - med) / mad
-            if score > _HAMPEL_THRESHOLD:
+            if score > hampel_k:
                 event.quality.flags.append(
                     QualityFlag(
                         code="OUTLIER_HAMPEL",
                         severity=Severity.WARNING,
                         stage="qualified",
-                        message=f"|x-median|/MAD = {score:.2f} > {_HAMPEL_THRESHOLD} (median={med}, MAD={mad})",
+                        message=f"|x-median|/MAD = {score:.2f} > {hampel_k} (median={med}, MAD={mad})",
                     )
                 )
