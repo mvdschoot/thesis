@@ -43,13 +43,30 @@ function tallyCoding(bundle: FhirBundle): CodingTally {
   return { total, coded };
 }
 
+// At very large bundle sizes, pretty-printing the entire bundle blocks the
+// main thread for seconds and produces multi-MB strings the DOM has to lay
+// out as one text node. We pretty-print at most this many entries for the
+// on-screen preview; Copy / Download still operate on the full bundle.
+const PREVIEW_MAX_ENTRIES = 100;
+
 export default function FhirBundlePanel({ bundle }: Props) {
   const [copied, setCopied] = useState(false);
 
-  const json = useMemo(
-    () => (bundle ? JSON.stringify(bundle, null, 2) : ""),
-    [bundle],
-  );
+  const entryCount = bundle?.entry?.length ?? 0;
+  const previewTruncated = entryCount > PREVIEW_MAX_ENTRIES;
+
+  // Preview: pretty-print at most PREVIEW_MAX_ENTRIES entries. The full
+  // bundle is only stringified inside copy() / download() handlers.
+  const previewJson = useMemo(() => {
+    if (!bundle) return "";
+    if (!previewTruncated) return JSON.stringify(bundle, null, 2);
+    const sliced = {
+      ...bundle,
+      entry: (bundle.entry ?? []).slice(0, PREVIEW_MAX_ENTRIES),
+    };
+    return JSON.stringify(sliced, null, 2);
+  }, [bundle, previewTruncated]);
+
   const chips = useMemo(() => (bundle ? counts(bundle) : []), [bundle]);
   const codingTally = useMemo(
     () => (bundle ? tallyCoding(bundle) : { total: 0, coded: 0 }),
@@ -71,7 +88,9 @@ export default function FhirBundlePanel({ bundle }: Props) {
   }
 
   function copy() {
-    void navigator.clipboard?.writeText(json).then(
+    if (!bundle) return;
+    const full = JSON.stringify(bundle, null, 2);
+    void navigator.clipboard?.writeText(full).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1400);
@@ -81,7 +100,9 @@ export default function FhirBundlePanel({ bundle }: Props) {
   }
 
   function download() {
-    const blob = new Blob([json], { type: "application/fhir+json" });
+    if (!bundle) return;
+    const full = JSON.stringify(bundle, null, 2);
+    const blob = new Blob([full], { type: "application/fhir+json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -120,8 +141,14 @@ export default function FhirBundlePanel({ bundle }: Props) {
           className="code-pre"
           style={{ maxHeight: 520, fontSize: 12, overflow: "auto" }}
         >
-          {json}
+          {previewJson}
         </pre>
+        {previewTruncated && (
+          <p className="help" style={{ marginTop: 8 }}>
+            Showing first {PREVIEW_MAX_ENTRIES.toLocaleString()} of{" "}
+            {entryCount.toLocaleString()} entries · use Download for the full bundle.
+          </p>
+        )}
         <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>
           {codingTally.total > 0 && (
             <>

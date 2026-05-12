@@ -10,23 +10,36 @@ interface Props {
 
 export default function EventStats({ events }: Props) {
   const stats = useMemo(() => {
-    const flagsTotal = events.reduce((s, e) => s + e.quality.flags.length, 0);
-    const warnings = events.reduce(
-      (s, e) => s + e.quality.flags.filter((f) => f.severity === "warning").length,
-      0,
-    );
-    const errors = events.reduce(
-      (s, e) => s + e.quality.flags.filter((f) => f.severity === "error").length,
-      0,
-    );
+    let flags = 0;
+    let warnings = 0;
+    let errors = 0;
+    let ok = 0;
+    let review = 0;
+    let exclude = 0;
+    let daily = 0;
+    let interval = 0;
+    for (const e of events) {
+      for (const f of e.quality.flags) {
+        flags++;
+        if (f.severity === "warning") warnings++;
+        else if (f.severity === "error") errors++;
+      }
+      const p = e.quality.plausibility;
+      if (p === "ok") ok++;
+      else if (p === "review") review++;
+      else if (p === "exclude") exclude++;
+      const g = e.granularity;
+      if (g === "daily") daily++;
+      else if (g === "interval") interval++;
+    }
     return {
       total: events.length,
-      ok: events.filter((e) => e.quality.plausibility === "ok").length,
-      review: events.filter((e) => e.quality.plausibility === "review").length,
-      exclude: events.filter((e) => e.quality.plausibility === "exclude").length,
-      daily: events.filter((e) => e.granularity === "daily").length,
-      interval: events.filter((e) => e.granularity === "interval").length,
-      flags: flagsTotal,
+      ok,
+      review,
+      exclude,
+      daily,
+      interval,
+      flags,
       warnings,
       errors,
     };

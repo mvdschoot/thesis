@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import type { CanonicalEvent } from "@/lib/types";
@@ -32,13 +32,15 @@ export default function EventTable({ events, selectedId, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [page, setPage] = useState(0);
 
-  const filtered = events.filter((e) => {
-    if (filter === "all") return true;
-    if (filter === "warn") return e.quality.flags.some((f) => f.severity === "warning");
-    if (filter === "err") return e.quality.flags.some((f) => f.severity === "error");
-    if (filter === "ok") return e.quality.flags.length === 0;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    if (filter === "all") return events;
+    return events.filter((e) => {
+      if (filter === "warn") return e.quality.flags.some((f) => f.severity === "warning");
+      if (filter === "err") return e.quality.flags.some((f) => f.severity === "error");
+      if (filter === "ok") return e.quality.flags.length === 0;
+      return true;
+    });
+  }, [events, filter]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);

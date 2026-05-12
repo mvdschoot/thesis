@@ -39,9 +39,17 @@ export default function Page() {
   const [inputMode, setInputMode] = useState<InputMode>("sample");
   const [datasetKey, setDatasetKey] = useState<string>(Object.keys(SAMPLE_DATASETS)[0]);
   const [customText, setCustomText] = useState<string>("");
+  // Debounced copy of customText so JSON.parse / matchConfigs don't run on
+  // every keystroke when the user pastes a multi-MB blob.
+  const [debouncedCustomText, setDebouncedCustomText] = useState<string>("");
   const [customFormat, setCustomFormat] = useState<TransformFormat>("json");
   const [customSource, setCustomSource] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCustomText(customText), 350);
+    return () => clearTimeout(t);
+  }, [customText]);
 
   // Adapter state — backend configs override the seeded SAMPLE_CONFIGS where available.
   const [configMap, setConfigMap] = useState<Record<string, AdapterConfig>>({ ...SAMPLE_CONFIGS });
@@ -140,35 +148,43 @@ export default function Page() {
 
   // ── Resolve the input data for transform.
   // For JSON: parsed object/array. For CSV: raw text passed through to the backend.
+  // Reads from the debounced text so a paste of multi-MB JSON doesn't re-parse
+  // on every keystroke.
   const inputData: unknown | null = useMemo(() => {
     if (inputMode === "sample") {
       return SAMPLE_DATASETS[datasetKey]?.record ?? null;
     }
-    if (!customText.trim()) return null;
-    if (customFormat === "csv") return customText;
+    if (!debouncedCustomText.trim()) return null;
+    if (customFormat === "csv") return debouncedCustomText;
     try {
-      return JSON.parse(customText) as unknown;
+      return JSON.parse(debouncedCustomText) as unknown;
     } catch {
       return null;
     }
-  }, [inputMode, datasetKey, customText, customFormat]);
+  }, [inputMode, datasetKey, debouncedCustomText, customFormat]);
 
-  // String form of inputData for endpoints that parse server-side (e.g. /configs/match).
+  // String form of inputData for endpoints that parse server-side (e.g.
+  // /configs/match). For custom input we already have the raw text — skip
+  // re-stringifying the parsed JSON (a wasted full pass on large payloads).
   const inputDataString: string | null = useMemo(() => {
+    if (inputMode === "custom") {
+      return debouncedCustomText.trim() ? debouncedCustomText : null;
+    }
     if (inputData == null) return null;
     if (typeof inputData === "string") return inputData;
     return JSON.stringify(inputData);
-  }, [inputData]);
+  }, [inputMode, debouncedCustomText, inputData]);
 
-  // Validate custom payload for user feedback (non-blocking).
+  // Validate custom payload for user feedback (non-blocking). Reads from the
+  // debounced text so we don't JSON.parse a multi-MB blob on each keystroke.
   useEffect(() => {
-    if (inputMode !== "custom" || !customText.trim()) {
+    if (inputMode !== "custom" || !debouncedCustomText.trim()) {
       setCustomError(null);
       return;
     }
     if (customFormat === "csv") {
       // Minimal sanity check: at least one newline-separated row of fields.
-      const firstLine = customText.split(/\r?\n/, 1)[0] ?? "";
+      const firstLine = debouncedCustomText.split(/\r?\n/, 1)[0] ?? "";
       if (!firstLine.includes(",")) {
         setCustomError("CSV looks malformed: no comma found in the header row.");
       } else {
@@ -177,12 +193,12 @@ export default function Page() {
       return;
     }
     try {
-      JSON.parse(customText);
+      JSON.parse(debouncedCustomText);
       setCustomError(null);
     } catch (e) {
       setCustomError(`Invalid JSON: ${(e as Error).message}`);
     }
-  }, [customText, inputMode, customFormat]);
+  }, [debouncedCustomText, inputMode, customFormat]);
 
   // Source name describes the *data*, not the adapter. In sample mode it comes
   // from the fixture; in custom mode the user owns it. Don't fall back to the
@@ -228,16 +244,24 @@ export default function Page() {
   const validateSummary = useMemo(() => summarizeValidate(config), [config]);
   const qualifySummary = useMemo(() => summarizeQualify(config), [config]);
 
+  // Single O(n) pass over events for the stage-strip flag counters. Kept
+  // separate from stageDefs so flipping stages / editing the YAML doesn't
+  // retraverse the event list.
+  const flagTotals = useMemo(() => {
+    let warn = 0;
+    let err = 0;
+    for (const e of events) {
+      for (const f of e.quality.flags) {
+        if (f.severity === "warning") warn++;
+        else if (f.severity === "error") err++;
+      }
+    }
+    return { warn, err };
+  }, [events]);
+
   const stageDefs: StageDef[] = useMemo(() => {
     const total = events.length;
-    const warn = events.reduce(
-      (s, e) => s + e.quality.flags.filter((f) => f.severity === "warning").length,
-      0,
-    );
-    const err = events.reduce(
-      (s, e) => s + e.quality.flags.filter((f) => f.severity === "error").length,
-      0,
-    );
+    const { warn, err } = flagTotals;
     const emitCount = config?.emit.length ?? 0;
     const cleanOn = cleanSummary.filter((r) => r.enabled).length;
     const validateOn = validateSummary.filter((r) => r.enabled).length;
@@ -288,7 +312,7 @@ export default function Page() {
         pulse: activeStage === "qualification",
       },
     ];
-  }, [events, activeStage, config, cleanSummary, validateSummary, qualifySummary]);
+  }, [events, flagTotals, activeStage, config, cleanSummary, validateSummary, qualifySummary]);
 
   const canRun = inputData != null && config != null;
 
