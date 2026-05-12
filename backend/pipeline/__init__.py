@@ -16,7 +16,7 @@ import yaml
 
 from domain.models import CanonicalEvent
 
-from . import adapter, cleaner, connector, fhir, qualifier, validator
+from . import adapter, cleaner, connector, fhir, mapper, qualifier, validator
 from .adapter.config_adapter import ConfigAdapter
 
 __all__ = ["run_pipeline"]
@@ -41,6 +41,7 @@ def run_pipeline(
     source: str | None = None,
     format: str = "json",
     device: str | None = None,
+    concept_mappings: dict[str, dict[str, str]] | None = None,
 ) -> tuple[list[CanonicalEvent], dict[str, Any]]:
     """Run a record (or batch) through every stage and return (events, stats)."""
     parsed = yaml.safe_load(yaml_text) or {}
@@ -54,6 +55,8 @@ def run_pipeline(
     validated = validator.run(cleaned, config=config_adapter.validate_block)
     qualified, stats = qualifier.run(validated, config=config_adapter.qualify_block)
     _strip_quality_overrides(qualified)
-    standardized, fhir_stats = fhir.run(qualified, config=config_adapter.fhir_block)
+    mapped, mapper_stats = mapper.run(qualified, mappings=concept_mappings)
+    stats.update(mapper_stats)
+    standardized, fhir_stats = fhir.run(mapped, config=config_adapter.fhir_block)
     stats.update(fhir_stats)
     return standardized, stats

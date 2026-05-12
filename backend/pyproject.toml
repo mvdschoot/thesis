@@ -33,4 +33,6 @@ packages = [
   "pipeline.cleaner",
   "pipeline.validator",
   "pipeline.qualifier",
+  "pipeline.mapper",
+  "pipeline.fhir",
 ]

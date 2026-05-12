@@ -20,7 +20,7 @@ import {
 } from "@/lib/api";
 import { summarizeClean, summarizeQualify, summarizeValidate } from "@/lib/rules";
 import { SAMPLE_CONFIGS, SAMPLE_DATASETS, SIMULATED_EVENTS } from "@/lib/sampleData";
-import type { AdapterConfig, CanonicalEvent } from "@/lib/types";
+import type { AdapterConfig, CanonicalEvent, Coding } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
 
 const SAMPLE_CONFIG_KEYS = Object.keys(SAMPLE_CONFIGS);
@@ -61,6 +61,9 @@ export default function Page() {
   const [runResult, setRunResult] = useState<TransformResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  // Concept-mapping state (session-only, sent on each /api/transform call).
+  const [conceptMappings, setConceptMappings] = useState<Record<string, Coding>>({});
 
   // Config matching state — populated by /api/configs/match against the current input.
   const [configMatches, setConfigMatches] = useState<ConfigMatch[] | null>(null);
@@ -219,6 +222,7 @@ export default function Page() {
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
   const bundle = runResult?.bundle ?? null;
+  const conceptSlots = runResult?.concept_slots ?? [];
 
   const cleanSummary = useMemo(() => summarizeClean(config), [config]);
   const validateSummary = useMemo(() => summarizeValidate(config), [config]);
@@ -288,7 +292,7 @@ export default function Page() {
 
   const canRun = inputData != null && config != null;
 
-  async function handleRun() {
+  async function handleRun(opts?: { preserveConcepts?: boolean }) {
     if (!canRun || !config) {
       setRunError("Need both input data and an adapter config before running.");
       return;
@@ -297,11 +301,19 @@ export default function Page() {
     setRunning(true);
     try {
       const yamlText = dumpAdapterYaml(config);
+      const mappingsToSend = opts?.preserveConcepts ? conceptMappings : {};
+      // Fresh runs (from Topbar) clear stale picks so slots reflect the new
+      // dataset; re-runs from the Concepts tab keep the current picks.
+      if (!opts?.preserveConcepts) {
+        setConceptMappings({});
+      }
       const res = await transform({
         data: inputData,
         yaml: yamlText,
         source: sourceName || undefined,
         format: activeFormat,
+        concept_mappings:
+          Object.keys(mappingsToSend).length > 0 ? mappingsToSend : undefined,
       });
       setRunResult(res);
       setActiveStage("results");
@@ -310,6 +322,15 @@ export default function Page() {
     } finally {
       setRunning(false);
     }
+  }
+
+  function handleConceptChange(key: string, coding: Coding | null) {
+    setConceptMappings((prev) => {
+      const next = { ...prev };
+      if (coding === null) delete next[key];
+      else next[key] = coding;
+      return next;
+    });
   }
 
   const configIds = useMemo(() => {
@@ -335,7 +356,7 @@ export default function Page() {
   return (
     <div className="app">
       <Topbar
-        onRun={handleRun}
+        onRun={() => handleRun()}
         running={running}
         canRun={canRun}
         configKey={configKey}
@@ -445,7 +466,16 @@ export default function Page() {
         )}
 
         {activeStage === "results" && (
-          <ResultsPanel events={events} source={eventSource} bundle={bundle} />
+          <ResultsPanel
+            events={events}
+            source={eventSource}
+            bundle={bundle}
+            conceptSlots={conceptSlots}
+            conceptMappings={conceptMappings}
+            onConceptChange={handleConceptChange}
+            onRerunWithConcepts={() => handleRun({ preserveConcepts: true })}
+            rerunning={running}
+          />
         )}
 
         <PipelineNav activeStage={activeStage} onJump={setActiveStage} />

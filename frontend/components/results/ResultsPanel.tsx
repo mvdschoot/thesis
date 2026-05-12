@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
-import type { CanonicalEvent, FhirBundle } from "@/lib/types";
+import type { CanonicalEvent, Coding, ConceptSlot, FhirBundle } from "@/lib/types";
 
+import ConceptsPanel from "./ConceptsPanel";
 import EventDrawer from "./EventDrawer";
 import EventStats from "./EventStats";
 import EventTable from "./EventTable";
@@ -14,14 +15,38 @@ interface Props {
   events: CanonicalEvent[];
   source: "live" | "simulated";
   bundle: FhirBundle | null;
+  conceptSlots: ConceptSlot[];
+  conceptMappings: Record<string, Coding>;
+  onConceptChange: (key: string, coding: Coding | null) => void;
+  onRerunWithConcepts: () => void;
+  rerunning: boolean;
 }
 
-type View = "events" | "fhir";
+type View = "events" | "concepts" | "fhir";
 
-export default function ResultsPanel({ events, source, bundle }: Props) {
+export default function ResultsPanel({
+  events,
+  source,
+  bundle,
+  conceptSlots,
+  conceptMappings,
+  onConceptChange,
+  onRerunWithConcepts,
+  rerunning,
+}: Props) {
   const [view, setView] = useState<View>("events");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = events.find((e) => e.event_id === selectedId) ?? null;
+
+  const unboundCount = useMemo(
+    () =>
+      conceptSlots.filter(
+        (s) =>
+          (s.kind === "code" || s.kind === "unit" || s.kind === "component") &&
+          !conceptMappings[s.key],
+      ).length,
+    [conceptSlots, conceptMappings],
+  );
 
   return (
     <div>
@@ -48,6 +73,17 @@ export default function ResultsPanel({ events, source, bundle }: Props) {
           Events ({events.length})
         </button>
         <button
+          className={cx("btn", view === "concepts" && "primary")}
+          onClick={() => setView("concepts")}
+          title="Bind LOINC / UCUM / FHIR codings to the detected concept slots"
+        >
+          Concepts{" "}
+          {conceptSlots.length > 0 &&
+            (unboundCount > 0
+              ? `(${unboundCount}/${conceptSlots.length} unbound)`
+              : `(${conceptSlots.length} ✓)`)}
+        </button>
+        <button
           className={cx("btn", view === "fhir" && "primary")}
           onClick={() => setView("fhir")}
           title="View the FHIR R4 Bundle produced by the pipeline"
@@ -62,6 +98,16 @@ export default function ResultsPanel({ events, source, bundle }: Props) {
           <EventTable events={events} selectedId={selectedId} onSelect={setSelectedId} />
           <EventDrawer event={selected} onClose={() => setSelectedId(null)} />
         </>
+      )}
+
+      {view === "concepts" && (
+        <ConceptsPanel
+          slots={conceptSlots}
+          mappings={conceptMappings}
+          onChange={onConceptChange}
+          onRerun={onRerunWithConcepts}
+          running={rerunning}
+        />
       )}
 
       {view === "fhir" && <FhirBundlePanel bundle={bundle} />}

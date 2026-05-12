@@ -1,8 +1,10 @@
 """FHIR R4 Bundle builder.
 
-Codesystem binding (LOINC / SNOMED / UCUM) is **out of scope** here — every
-``CodeableConcept`` we emit carries ``text`` only. That work belongs to the
-future ``MAPPED`` stage, which populates ``CanonicalEvent.mapping``.
+Each ``CodeableConcept`` carries ``text`` plus, when a user has bound a
+concept in the MAPPED stage, a ``coding[]`` array. Bindings live on
+``event.mapping`` (headline ``Observation.code``) or
+``event.extensions["_concept_codings"]`` (unit / component / category).
+The builder never strips ``text`` — it stays as the human-readable fallback.
 
 Resource-type mapping by ``event.type``:
 
@@ -86,12 +88,16 @@ def _effective(event: CanonicalEvent) -> dict[str, Any]:
     return {}
 
 
-def _value_block(value: Any, unit: str | None) -> dict[str, Any]:
+def _value_block(
+    value: Any,
+    unit: str | None,
+    unit_coding: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Render a payload value as the appropriate FHIR ``value[x]`` slice.
 
-    Numeric → ``valueQuantity`` (UCUM coding deferred to MAPPED stage; we
-    write ``unit`` text only). Boolean → ``valueBoolean``. Anything else,
-    when not None, falls through to ``valueString``.
+    Numeric → ``valueQuantity`` with UCUM ``system``/``code`` when the MAPPED
+    stage has bound a unit. Boolean → ``valueBoolean``. Anything else, when
+    not None, falls through to ``valueString``.
     """
     if value is None:
         return {}
@@ -101,8 +107,51 @@ def _value_block(value: Any, unit: str | None) -> dict[str, Any]:
         q: dict[str, Any] = {"value": value}
         if unit:
             q["unit"] = unit
+        if unit_coding:
+            sys_ = unit_coding.get("system")
+            code = unit_coding.get("code")
+            if sys_:
+                q["system"] = sys_
+            if code:
+                q["code"] = code
         return {"valueQuantity": q}
     return {"valueString": str(value)}
+
+
+def _coding_from_mapping(mapping: Any) -> dict[str, str] | None:
+    """Build one FHIR Coding from a ``CanonicalEvent.mapping`` if populated."""
+    if not mapping or not mapping.standard_code or not mapping.standard_system:
+        return None
+    c: dict[str, str] = {
+        "system": mapping.standard_system,
+        "code": mapping.standard_code,
+    }
+    if mapping.standard_display:
+        c["display"] = mapping.standard_display
+    return c
+
+
+def _coding_from_dict(d: dict[str, str] | None) -> dict[str, str] | None:
+    """Normalise a ``{system, code, display}`` dict into a FHIR Coding."""
+    if not d:
+        return None
+    sys_ = d.get("system")
+    code = d.get("code")
+    if not sys_ or not code:
+        return None
+    out: dict[str, str] = {"system": sys_, "code": code}
+    disp = d.get("display")
+    if disp:
+        out["display"] = disp
+    return out
+
+
+def _concept_codings(event: CanonicalEvent) -> dict[str, Any]:
+    """Read the private ``_concept_codings`` extension. Empty dict when unset."""
+    if not event.extensions:
+        return {}
+    bag = event.extensions.get("_concept_codings")
+    return bag if isinstance(bag, dict) else {}
 
 
 def _build_patient(subject_id: str) -> dict[str, Any]:
@@ -168,28 +217,54 @@ def _build_observation(
     patient_uuid: str,
     device_uuid_value: str | None = None,
 ) -> dict[str, Any]:
+    codings = _concept_codings(event)
+
+    cat_text = _category_text_for_event(event)
+    category_cc: dict[str, Any] = {"text": cat_text}
+    cat_coding = _coding_from_dict(codings.get("category"))
+    if cat_coding:
+        category_cc["coding"] = [cat_coding]
+
+    code_cc: dict[str, Any] = {"text": event.payload.label or event.category}
+    code_coding = _coding_from_mapping(event.mapping)
+    if code_coding:
+        code_cc["coding"] = [code_coding]
+
     obs: dict[str, Any] = {
         "resourceType": "Observation",
         "id": event.event_id,
         "status": _status_for_event(event),
-        "category": [{"text": _category_text_for_event(event)}],
-        # text-only — the MAPPED stage fills coding[].
-        "code": {"text": event.payload.label or event.category},
+        "category": [category_cc],
+        "code": code_cc,
         "subject": {"reference": f"urn:uuid:{patient_uuid}"},
     }
     obs.update(_effective(event))
 
     # Top-level value (or components, mutually exclusive in FHIR R4).
     if event.payload.components:
-        obs["component"] = [
-            {
-                "code": {"text": c.name},
-                **_value_block(c.value, c.unit),
-            }
-            for c in event.payload.components
-        ]
+        component_codings = codings.get("component") or {}
+        component_unit_codings = codings.get("component_unit") or {}
+        comp_list: list[dict[str, Any]] = []
+        for c in event.payload.components:
+            comp_code: dict[str, Any] = {"text": c.name}
+            cc = _coding_from_dict(component_codings.get(c.name))
+            if cc:
+                comp_code["coding"] = [cc]
+            comp_list.append({
+                "code": comp_code,
+                **_value_block(
+                    c.value,
+                    c.unit,
+                    unit_coding=_coding_from_dict(component_unit_codings.get(c.name)),
+                ),
+            })
+        obs["component"] = comp_list
     else:
-        obs.update(_value_block(event.payload.value, event.payload.unit))
+        obs.update(_value_block(
+            event.payload.value,
+            event.payload.unit,
+            unit_coding=_coding_from_dict(codings.get("unit")),
+        ))
 
     if event.quality.flags:
         obs["note"] = [
@@ -231,19 +306,29 @@ def _build_questionnaire_response(
     if event.timestamp:
         qr["authored"] = event.timestamp
 
+    codings = _concept_codings(event)
     items: list[dict[str, Any]] = []
     if event.payload.components:
+        component_unit_codings = codings.get("component_unit") or {}
         for c in event.payload.components:
             items.append({
                 "linkId": c.name,
                 "text": c.name,
-                "answer": [_qr_answer(c.value, c.unit)],
+                "answer": [_qr_answer(
+                    c.value,
+                    c.unit,
+                    unit_coding=_coding_from_dict(component_unit_codings.get(c.name)),
+                )],
             })
     elif event.payload.value is not None:
         items.append({
             "linkId": event.payload.label or event.category,
             "text": event.payload.label or event.category,
-            "answer": [_qr_answer(event.payload.value, event.payload.unit)],
+            "answer": [_qr_answer(
+                event.payload.value,
+                event.payload.unit,
+                unit_coding=_coding_from_dict(codings.get("unit")),
+            )],
         })
     if items:
         qr["item"] = items
@@ -270,16 +355,27 @@ def _qr_status_for_event(event: CanonicalEvent) -> str:
     return "completed"
 
 
-def _qr_answer(value: Any, unit: str | None) -> dict[str, Any]:
+def _qr_answer(
+    value: Any,
+    unit: str | None,
+    unit_coding: dict[str, str] | None = None,
+) -> dict[str, Any]:
     if value is None:
         return {"valueString": ""}
     if isinstance(value, bool):
         return {"valueBoolean": value}
     if isinstance(value, (int, float)):
-        a: dict[str, Any] = {"valueQuantity": {"value": value}}
+        q: dict[str, Any] = {"value": value}
         if unit:
-            a["valueQuantity"]["unit"] = unit
-        return a
+            q["unit"] = unit
+        if unit_coding:
+            sys_ = unit_coding.get("system")
+            code = unit_coding.get("code")
+            if sys_:
+                q["system"] = sys_
+            if code:
+                q["code"] = code
+        return {"valueQuantity": q}
     return {"valueString": str(value)}
 
 

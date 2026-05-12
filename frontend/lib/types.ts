@@ -227,6 +227,32 @@ export interface FhirBundle {
   entry: FhirBundleEntry[];
 }
 
+// ─── Concept mapping (MAPPED stage) ─────────────────────────────────────────
+
+export interface Coding {
+  system: string;
+  code: string;
+  display?: string | null;
+}
+
+export type ConceptSlotKind = "code" | "unit" | "component" | "category";
+
+export interface ConceptSlot {
+  key: string;
+  kind: ConceptSlotKind;
+  label: string;
+  count: number;
+  sample: {
+    value?: unknown;
+    unit?: string | null;
+    timestamp?: string;
+    subject_id?: string;
+  };
+  suggested_system?: string | null;
+  default_coding?: Coding | null;
+  current_mapping?: Coding | null;
+}
+
 // ─── Sample dataset shape (input-side mock) ─────────────────────────────────
 
 export interface SampleDataset {

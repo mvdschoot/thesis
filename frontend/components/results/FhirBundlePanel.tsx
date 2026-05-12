@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { cx } from "@/lib/cx";
 import type { FhirBundle } from "@/lib/types";
 
 interface Props {
@@ -19,6 +20,29 @@ function counts(bundle: FhirBundle): { kind: string; n: number }[] {
     .map(([kind, n]) => ({ kind, n }));
 }
 
+interface CodingTally {
+  total: number;
+  coded: number;
+}
+
+function tallyCoding(bundle: FhirBundle): CodingTally {
+  // Walk every Observation / QR resource and count code.coding[] vs text-only.
+  let total = 0;
+  let coded = 0;
+  for (const e of bundle.entry ?? []) {
+    const r = e.resource as Record<string, unknown> | undefined;
+    if (!r) continue;
+    const kind = r.resourceType;
+    if (kind !== "Observation" && kind !== "QuestionnaireResponse") continue;
+    if (kind === "Observation") {
+      total += 1;
+      const code = r.code as { coding?: unknown[] } | undefined;
+      if (Array.isArray(code?.coding) && code.coding.length > 0) coded += 1;
+    }
+  }
+  return { total, coded };
+}
+
 export default function FhirBundlePanel({ bundle }: Props) {
   const [copied, setCopied] = useState(false);
 
@@ -27,6 +51,10 @@ export default function FhirBundlePanel({ bundle }: Props) {
     [bundle],
   );
   const chips = useMemo(() => (bundle ? counts(bundle) : []), [bundle]);
+  const codingTally = useMemo(
+    () => (bundle ? tallyCoding(bundle) : { total: 0, coded: 0 }),
+    [bundle],
+  );
 
   if (!bundle) {
     return (
@@ -95,10 +123,27 @@ export default function FhirBundlePanel({ bundle }: Props) {
           {json}
         </pre>
         <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>
-          Text-only <span className="mono">CodeableConcept</span> fields by design — codings
-          (LOINC / SNOMED / UCUM) are populated by the future <span className="mono">MAPPED</span>{" "}
-          stage. The bundle is structurally FHIR R4-conformant and posts cleanly to a transaction
-          endpoint, but downstream code-based queries will require the codings.
+          {codingTally.total > 0 && (
+            <>
+              <span
+                className={cx(
+                  "chip mono",
+                  codingTally.coded === codingTally.total
+                    ? "ok"
+                    : codingTally.coded === 0
+                    ? "warn"
+                    : "info",
+                )}
+                style={{ marginRight: 8 }}
+              >
+                Observation.code · {codingTally.coded}/{codingTally.total} with coding[]
+              </span>
+            </>
+          )}
+          <span className="mono">CodeableConcept.text</span> is always present as the human-readable
+          fallback. Use the <span className="mono">Concepts</span> tab to bind LOINC / UCUM /
+          SNOMED CT codings via OMOPHub, then re-transform to populate{" "}
+          <span className="mono">coding[]</span>.
         </p>
       </div>
     </div>

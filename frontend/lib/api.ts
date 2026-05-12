@@ -85,6 +85,7 @@ export interface TransformRequest {
   source?: string;
   device?: string;
   format?: TransformFormat;
+  concept_mappings?: Record<string, import("./types").Coding>;
 }
 
 export interface TransformStats {
@@ -101,7 +102,10 @@ export interface TransformResponse {
   events: import("./types").CanonicalEvent[];
   stats: TransformStats;
   bundle: import("./types").FhirBundle | null;
+  concept_slots: import("./types").ConceptSlot[];
 }
+
+export type TerminologySystem = "loinc" | "ucum" | "snomed";
 
 export function generateConfig(req: GenerateConfigRequest) {
   return post<GenerateConfigResponse>("/api/generate-config", req);
@@ -125,4 +129,13 @@ export function updateConfig(id: string, yaml: string) {
 
 export function matchConfigs(data: string, format: TransformFormat, source?: string) {
   return post<ConfigMatch[]>("/api/configs/match", { data, format, source });
+}
+
+export function searchTerminology(
+  system: TerminologySystem,
+  q: string,
+  max: number = 20,
+) {
+  const params = new URLSearchParams({ system, q, max: String(max) });
+  return get<import("./types").Coding[]>(`/api/terminology/search?${params}`);
 }

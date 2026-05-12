@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from domain.models import SourceMetadata
 from pipeline import connector, run_pipeline
@@ -28,11 +28,13 @@ from .models import (
     GenerateConfigResponse,
     InputFormat,
     MatchConfigsRequest,
+    TerminologySearchResult,
     TransformRequest,
     TransformResponse,
     UpdateConfigRequest,
 )
 from .prompts import build_system_prompt, build_user_prompt, strip_code_fence
+from .terminology import TerminologyError, get_client as get_terminology_client
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +218,13 @@ def transform(req: TransformRequest) -> TransformResponse:
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Config is missing required sections: {e}")
 
+    # Pydantic Coding → plain dict so the mapper stage stays framework-agnostic.
+    concept_mappings = (
+        {k: v.model_dump() for k, v in req.concept_mappings.items()}
+        if req.concept_mappings
+        else None
+    )
+
     try:
         events, stats = run_pipeline(
             data=req.data,
@@ -223,6 +232,7 @@ def transform(req: TransformRequest) -> TransformResponse:
             source=req.source,
             format=req.format,
             device=req.device,
+            concept_mappings=concept_mappings,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -235,8 +245,40 @@ def transform(req: TransformRequest) -> TransformResponse:
         stats["fhir.resource_count"] = fhir_stats.get("resource_count", 0)
         stats["fhir.size_bytes"] = fhir_stats.get("size_bytes", 0)
 
+    mapper_stats = stats.pop("mapper", None)
+    concept_slots = (
+        mapper_stats.get("slots", []) if isinstance(mapper_stats, dict) else []
+    )
+    if isinstance(mapper_stats, dict):
+        stats["mapper.slot_count"] = mapper_stats.get("slot_count", 0)
+        stats["mapper.unbound_count"] = mapper_stats.get("unbound_count", 0)
+
     return TransformResponse(
         events=[e.to_dict() for e in events],
         stats=stats,
         bundle=bundle,
+        concept_slots=concept_slots,
     )
+
+
+# ─── /terminology/search (NLM Clinical Tables proxy) ────────────────────────
+
+@router.get("/terminology/search", response_model=list[TerminologySearchResult])
+def terminology_search(
+    system: str = Query(..., description="loinc | ucum | snomed"),
+    q: str = Query("", description="search terms"),
+    max: int = Query(20, ge=1, le=50, description="max results to return"),
+) -> list[TerminologySearchResult]:
+    sys_norm = (system or "").strip().lower()
+    if sys_norm not in ("loinc", "ucum", "snomed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported system={system!r}; expected one of: loinc, ucum, snomed",
+        )
+    if not q.strip():
+        return []
+    try:
+        results = get_terminology_client().search(sys_norm, q, max_results=max)  # type: ignore[arg-type]
+    except TerminologyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return [TerminologySearchResult(**r) for r in results]
