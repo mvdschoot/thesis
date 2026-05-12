@@ -197,6 +197,11 @@ export const SAMPLE_CONFIGS: Record<string, AdapterConfig> = {
       },
       plausibility: { warning_count_for_review: 1 },
     },
+    fhir: {
+      enabled: true,
+      bundle_type: "transaction",
+      include: ["Patient", "Observation"],
+    },
   },
 };
 

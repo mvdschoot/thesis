@@ -67,3 +67,8 @@ qualify:
   outliers:    { hampel_k: 3.5, min_group_size: 5 }
   duplicates:  { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
   plausibility: { warning_count_for_review: 1 }
+
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include: [Patient, Observation]

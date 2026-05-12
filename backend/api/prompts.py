@@ -32,6 +32,7 @@ Top-level sections:
 - `clean` (optional): cleaner chain composition + per-heuristic params. Omitted → default chain.
 - `validate` (optional): which validators run + per-category overlay on top of the global quality_rules.yaml. Omitted → all validators, global rules.
 - `qualify` (optional): which cross-event checks run + tunables (Hampel k, fingerprint fields, plausibility threshold). Omitted → all checks with defaults.
+- `fhir` (optional): toggles + bundle shape for the FHIR R4 output stage. Omitted → FHIR output enabled with sensible defaults (Patient + Observation, transaction bundle).
 
 Match-block rigidity (MANDATORY):
 - Do NOT rely on `match.source` alone — that lets the engine try to transform records you can't actually handle. For every config you generate, the `record` list MUST:
@@ -96,6 +97,17 @@ Qualifier block (`qualify`):
 - `duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }` — the fingerprint over which to detect duplicates. `fields` accepts any dotted path on the canonical event.
 - `plausibility: { warning_count_for_review: 1 }` — number of WARNING flags after which `quality.plausibility` becomes `"review"`. Any ERROR forces `"exclude"` regardless.
 - `completeness: { expected_fields: { <category>: [<paths>] } }` — overrides per-category expected_fields when computing the completeness ratio.
+
+FHIR block (`fhir`):
+- `enabled: true | false` — when false, the pipeline returns no bundle. Default: true.
+- `bundle_type: transaction | collection` — `transaction` adds `entry.request.method/url` and is suitable for POST-ing to a FHIR server. `collection` omits the request slice. Default: `transaction`.
+- `include`: subset of `[Patient, Observation, Device, Provenance]`. Default: `[Patient, Observation]`. Add `Device` when `context.device` is meaningful in the sample, and `Provenance` when the user explicitly wants an audit trail attached to the bundle.
+- Hardcoded behaviors (NOT user-configurable here):
+    - Every CodeableConcept is text-only. Codesystem binding (LOINC / SNOMED / UCUM) is the future MAPPED stage's responsibility, not this stage's.
+    - `event.type=measurement|observation|event|session|summary` → `Observation`. `event.type=survey` → `QuestionnaireResponse`.
+    - `quality.plausibility="exclude" → status="entered-in-error"`, `"review" → "amended"`, otherwise `"final"`.
+    - `payload.value` is mapped to `valueQuantity` (numeric) / `valueBoolean` / `valueString`. `payload.components[]` becomes `Observation.component[]` or `QuestionnaireResponse.item[]`.
+    - Subject + Device + Observation references are stable UUID5 derivations of `subject_id`, `(source, device)`, and `event_id` respectively — re-running the pipeline produces identical bundle URIs.
 
 Defaults & omission rule:
 - Every block, every nested key, every parameter is optional. Omitted = current default behavior.

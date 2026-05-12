@@ -58,3 +58,4 @@ class TransformRequest(BaseModel):
 class TransformResponse(BaseModel):
     events: list[dict[str, Any]]
     stats: dict[str, Any]
+    bundle: dict[str, Any] | None = None

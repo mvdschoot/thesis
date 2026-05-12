@@ -2,24 +2,30 @@
 
 import { useState } from "react";
 
-import type { CanonicalEvent } from "@/lib/types";
+import { cx } from "@/lib/cx";
+import type { CanonicalEvent, FhirBundle } from "@/lib/types";
 
 import EventDrawer from "./EventDrawer";
 import EventStats from "./EventStats";
 import EventTable from "./EventTable";
+import FhirBundlePanel from "./FhirBundlePanel";
 
 interface Props {
   events: CanonicalEvent[];
   source: "live" | "simulated";
+  bundle: FhirBundle | null;
 }
 
-export default function ResultsPanel({ events, source }: Props) {
+type View = "events" | "fhir";
+
+export default function ResultsPanel({ events, source, bundle }: Props) {
+  const [view, setView] = useState<View>("events");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = events.find((e) => e.event_id === selectedId) ?? null;
 
   return (
     <div>
-      <div className="section-sub">Output · CanonicalEvent[]</div>
+      <div className="section-sub">Output · CanonicalEvent[] + FHIR Bundle</div>
       <h2 className="section-title">Results</h2>
       <p className="muted" style={{ maxWidth: 720, marginTop: 0 }}>
         Stateless per-request output. Failed-validation events are tagged, not dropped — consumers choose their own filter point.
@@ -34,9 +40,31 @@ export default function ResultsPanel({ events, source }: Props) {
         )}
       </p>
 
-      <EventStats events={events} />
-      <EventTable events={events} selectedId={selectedId} onSelect={setSelectedId} />
-      <EventDrawer event={selected} onClose={() => setSelectedId(null)} />
+      <div style={{ display: "flex", gap: 8, margin: "12px 0 6px" }}>
+        <button
+          className={cx("btn", view === "events" && "primary")}
+          onClick={() => setView("events")}
+        >
+          Events ({events.length})
+        </button>
+        <button
+          className={cx("btn", view === "fhir" && "primary")}
+          onClick={() => setView("fhir")}
+          title="View the FHIR R4 Bundle produced by the pipeline"
+        >
+          FHIR Bundle{bundle ? ` (${bundle.entry?.length ?? 0})` : ""}
+        </button>
+      </div>
+
+      {view === "events" && (
+        <>
+          <EventStats events={events} />
+          <EventTable events={events} selectedId={selectedId} onSelect={setSelectedId} />
+          <EventDrawer event={selected} onClose={() => setSelectedId(null)} />
+        </>
+      )}
+
+      {view === "fhir" && <FhirBundlePanel bundle={bundle} />}
     </div>
   );
 }

@@ -33,6 +33,7 @@ from domain.models import (
 )
 
 from pipeline.cleaner.config import CleanConfig
+from pipeline.fhir.config import FhirConfig
 from pipeline.qualifier.config import QualifyConfig
 from pipeline.validator.config import ValidateConfig
 
@@ -300,6 +301,7 @@ class ConfigAdapter(BaseAdapter):
         self._clean_block = CleanConfig.from_dict(self._config.get("clean"))
         self._validate_block = ValidateConfig.from_dict(self._config.get("validate"))
         self._qualify_block = QualifyConfig.from_dict(self._config.get("qualify"))
+        self._fhir_block = FhirConfig.from_dict(self._config.get("fhir"))
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]) -> "ConfigAdapter":
@@ -328,6 +330,10 @@ class ConfigAdapter(BaseAdapter):
     @property
     def qualify_block(self) -> QualifyConfig | None:
         return self._qualify_block
+
+    @property
+    def fhir_block(self) -> FhirConfig | None:
+        return self._fhir_block
 
     def can_handle(self, metadata: SourceMetadata, record: dict[str, Any]) -> bool:
         for condition in self._match.get("record", []):

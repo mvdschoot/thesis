@@ -218,6 +218,7 @@ export default function Page() {
 
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
+  const bundle = runResult?.bundle ?? null;
 
   const cleanSummary = useMemo(() => summarizeClean(config), [config]);
   const validateSummary = useMemo(() => summarizeValidate(config), [config]);
@@ -444,7 +445,7 @@ export default function Page() {
         )}
 
         {activeStage === "results" && (
-          <ResultsPanel events={events} source={eventSource} />
+          <ResultsPanel events={events} source={eventSource} bundle={bundle} />
         )}
 
         <PipelineNav activeStage={activeStage} onJump={setActiveStage} />

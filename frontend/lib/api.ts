@@ -100,6 +100,7 @@ export interface TransformStats {
 export interface TransformResponse {
   events: import("./types").CanonicalEvent[];
   stats: TransformStats;
+  bundle: import("./types").FhirBundle | null;
 }
 
 export function generateConfig(req: GenerateConfigRequest) {

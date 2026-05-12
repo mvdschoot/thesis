@@ -199,6 +199,7 @@ export interface PipelineConfig {
   clean?: Record<string, unknown>;
   validate?: Record<string, unknown>;
   qualify?: Record<string, unknown>;
+  fhir?: Record<string, unknown>;
   // Carry every other top-level YAML key the user (or LLM) included that we
   // don't model explicitly — keeps round-trip lossless.
   extra?: Record<string, unknown>;
@@ -206,6 +207,25 @@ export interface PipelineConfig {
 
 /** @deprecated Use PipelineConfig. Kept as an alias during the transition. */
 export type AdapterConfig = PipelineConfig;
+
+// ─── FHIR Bundle (output-side, structural-only) ─────────────────────────────
+//
+// Minimal shape the frontend needs to render a Bundle viewer. We intentionally
+// keep this loose — `resource` is `Record<string, unknown>` because text-only
+// CodeableConcepts (no codings) and the variety of FHIR resource shapes don't
+// repay a full type tree on the frontend. Backend is the source of truth.
+
+export interface FhirBundleEntry {
+  fullUrl: string;
+  resource: { resourceType: string } & Record<string, unknown>;
+  request?: { method: string; url: string };
+}
+
+export interface FhirBundle {
+  resourceType: "Bundle";
+  type: string;
+  entry: FhirBundleEntry[];
+}
 
 // ─── Sample dataset shape (input-side mock) ─────────────────────────────────
 

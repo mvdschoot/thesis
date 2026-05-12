@@ -1,0 +1,424 @@
+"""FHIR R4 Bundle builder.
+
+Codesystem binding (LOINC / SNOMED / UCUM) is **out of scope** here — every
+``CodeableConcept`` we emit carries ``text`` only. That work belongs to the
+future ``MAPPED`` stage, which populates ``CanonicalEvent.mapping``.
+
+Resource-type mapping by ``event.type``:
+
+* ``measurement`` / ``observation`` / ``event`` / ``session`` / ``summary``
+  → :class:`Observation`
+* ``survey`` → :class:`QuestionnaireResponse` (added in a later step)
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from domain.models import CanonicalEvent, EventType
+
+from .config import FhirConfig
+from .refs import device_uuid, observation_uuid, provenance_uuid, subject_uuid
+
+
+# Coarse mapping from canonical category → FHIR Observation.category.text.
+# The FHIR R4 spec accepts text-only CodeableConcepts; codings (vital-signs
+# value set, US Core profiles, etc.) are bound by the future MAPPED stage.
+_VITAL_SIGN_CATEGORIES: frozenset[str] = frozenset({
+    "weight", "height", "body-mass-index", "bmi",
+    "heart-rate", "blood-pressure",
+    "respiratory-rate", "body-temperature",
+    "oxygen-saturation", "spo2",
+})
+
+_ACTIVITY_CATEGORIES: frozenset[str] = frozenset({
+    "steps", "distance", "calories", "intensity",
+    "active-minutes", "exercise", "workout", "session",
+    "sleep", "sleep-stage",
+})
+
+
+def _category_text_for_event(event: CanonicalEvent) -> str:
+    """Pick a coarse FHIR Observation.category text bucket."""
+    if event.type == EventType.SURVEY:
+        return "survey"
+    if event.type == EventType.OBSERVATION:
+        return "exam"
+    if event.type in (EventType.EVENT, EventType.SESSION):
+        return "activity"
+    cat = event.category.lower() if event.category else ""
+    if cat in _VITAL_SIGN_CATEGORIES:
+        return "vital-signs"
+    if cat in _ACTIVITY_CATEGORIES:
+        return "activity"
+    return "exam"
+
+
+def _status_for_event(event: CanonicalEvent) -> str:
+    """Map plausibility to FHIR Observation.status.
+
+    plausibility=exclude → entered-in-error
+    plausibility=review  → amended
+    everything else      → final
+    """
+    p = event.quality.plausibility
+    if p == "exclude":
+        return "entered-in-error"
+    if p == "review":
+        return "amended"
+    return "final"
+
+
+def _effective(event: CanonicalEvent) -> dict[str, Any]:
+    """Build the FHIR ``effective[x]`` slice from event timestamps.
+
+    Returns ``effectivePeriod`` if the event has both start and end,
+    otherwise ``effectiveDateTime``. Empty timestamps are omitted (the
+    validator should already have caught that earlier).
+    """
+    start = event.timestamp or None
+    end = event.timestamp_end or None
+    if start and end:
+        return {"effectivePeriod": {"start": start, "end": end}}
+    if start:
+        return {"effectiveDateTime": start}
+    if end:
+        return {"effectiveDateTime": end}
+    return {}
+
+
+def _value_block(value: Any, unit: str | None) -> dict[str, Any]:
+    """Render a payload value as the appropriate FHIR ``value[x]`` slice.
+
+    Numeric → ``valueQuantity`` (UCUM coding deferred to MAPPED stage; we
+    write ``unit`` text only). Boolean → ``valueBoolean``. Anything else,
+    when not None, falls through to ``valueString``.
+    """
+    if value is None:
+        return {}
+    if isinstance(value, bool):
+        return {"valueBoolean": value}
+    if isinstance(value, (int, float)):
+        q: dict[str, Any] = {"value": value}
+        if unit:
+            q["unit"] = unit
+        return {"valueQuantity": q}
+    return {"valueString": str(value)}
+
+
+def _build_patient(subject_id: str) -> dict[str, Any]:
+    """Synthesized Patient — id and identifier only, no PII fields."""
+    patient_id = subject_uuid(subject_id)
+    return {
+        "resourceType": "Patient",
+        "id": patient_id,
+        "identifier": [
+            {
+                "system": "urn:harmonia:subject",
+                "value": subject_id,
+            }
+        ],
+    }
+
+
+def _build_device(source: str, device: str) -> dict[str, Any]:
+    """Synthesized Device — manufacturer = source, deviceName.text = device."""
+    dev_id = device_uuid(source, device)
+    return {
+        "resourceType": "Device",
+        "id": dev_id,
+        "identifier": [
+            {
+                "system": "urn:harmonia:device",
+                "value": f"{source}|{device}",
+            }
+        ],
+        "manufacturer": source,
+        "deviceName": [{"name": device, "type": "user-friendly-name"}],
+    }
+
+
+def _build_provenance(
+    *,
+    target_full_urls: list[str],
+    adapter_id: str,
+    adapter_version: str,
+    recorded_at: str,
+) -> dict[str, Any]:
+    """One Provenance resource pointing at every observation in the bundle."""
+    prov_seed = f"{adapter_id}|{adapter_version}|{recorded_at}"
+    return {
+        "resourceType": "Provenance",
+        "id": provenance_uuid(prov_seed),
+        "recorded": recorded_at,
+        "target": [{"reference": ref} for ref in target_full_urls],
+        "agent": [
+            {
+                "type": {"text": "assembler"},
+                "who": {
+                    "display": f"harmonia adapter {adapter_id}@{adapter_version}",
+                },
+            }
+        ],
+    }
+
+
+def _build_observation(
+    event: CanonicalEvent,
+    *,
+    patient_uuid: str,
+    device_uuid_value: str | None = None,
+) -> dict[str, Any]:
+    obs: dict[str, Any] = {
+        "resourceType": "Observation",
+        "id": event.event_id,
+        "status": _status_for_event(event),
+        "category": [{"text": _category_text_for_event(event)}],
+        # text-only — the MAPPED stage fills coding[].
+        "code": {"text": event.payload.label or event.category},
+        "subject": {"reference": f"urn:uuid:{patient_uuid}"},
+    }
+    obs.update(_effective(event))
+
+    # Top-level value (or components, mutually exclusive in FHIR R4).
+    if event.payload.components:
+        obs["component"] = [
+            {
+                "code": {"text": c.name},
+                **_value_block(c.value, c.unit),
+            }
+            for c in event.payload.components
+        ]
+    else:
+        obs.update(_value_block(event.payload.value, event.payload.unit))
+
+    if event.quality.flags:
+        obs["note"] = [
+            {
+                "text": (
+                    f"[{f.severity.value}/{f.code}] {f.message or ''}".strip()
+                )
+            }
+            for f in event.quality.flags
+        ]
+
+    if device_uuid_value:
+        obs["device"] = {"reference": f"urn:uuid:{device_uuid_value}"}
+
+    if event.type == EventType.SUMMARY and event.provenance.parent_event_id:
+        obs["derivedFrom"] = [
+            {"reference": f"urn:uuid:{observation_uuid(event.provenance.parent_event_id)}"}
+        ]
+
+    return obs
+
+
+def _build_questionnaire_response(
+    event: CanonicalEvent, *, patient_uuid: str
+) -> dict[str, Any]:
+    """Build a QuestionnaireResponse from a survey event.
+
+    Each ``payload.components[]`` entry becomes one ``item[]`` linkId/answer
+    pair; if the event has no components, a single item is built from
+    ``payload.value``. Codesystem-bound Questionnaire references are out of
+    scope (MAPPED stage).
+    """
+    qr: dict[str, Any] = {
+        "resourceType": "QuestionnaireResponse",
+        "id": event.event_id,
+        "status": _qr_status_for_event(event),
+        "subject": {"reference": f"urn:uuid:{patient_uuid}"},
+    }
+    if event.timestamp:
+        qr["authored"] = event.timestamp
+
+    items: list[dict[str, Any]] = []
+    if event.payload.components:
+        for c in event.payload.components:
+            items.append({
+                "linkId": c.name,
+                "text": c.name,
+                "answer": [_qr_answer(c.value, c.unit)],
+            })
+    elif event.payload.value is not None:
+        items.append({
+            "linkId": event.payload.label or event.category,
+            "text": event.payload.label or event.category,
+            "answer": [_qr_answer(event.payload.value, event.payload.unit)],
+        })
+    if items:
+        qr["item"] = items
+
+    if event.quality.flags:
+        qr["note"] = [
+            {
+                "text": (
+                    f"[{f.severity.value}/{f.code}] {f.message or ''}".strip()
+                )
+            }
+            for f in event.quality.flags
+        ]
+    return qr
+
+
+def _qr_status_for_event(event: CanonicalEvent) -> str:
+    """QuestionnaireResponse.status uses a different value set than Observation."""
+    p = event.quality.plausibility
+    if p == "exclude":
+        return "entered-in-error"
+    if p == "review":
+        return "amended"
+    return "completed"
+
+
+def _qr_answer(value: Any, unit: str | None) -> dict[str, Any]:
+    if value is None:
+        return {"valueString": ""}
+    if isinstance(value, bool):
+        return {"valueBoolean": value}
+    if isinstance(value, (int, float)):
+        a: dict[str, Any] = {"valueQuantity": {"value": value}}
+        if unit:
+            a["valueQuantity"]["unit"] = unit
+        return a
+    return {"valueString": str(value)}
+
+
+def _entry(full_url: str, resource: dict[str, Any], *, bundle_type: str) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "fullUrl": f"urn:uuid:{full_url}",
+        "resource": resource,
+    }
+    if bundle_type == "transaction":
+        method = "PUT" if resource["resourceType"] == "Patient" else "POST"
+        url = (
+            f"{resource['resourceType']}/{resource['id']}"
+            if method == "PUT"
+            else resource["resourceType"]
+        )
+        entry["request"] = {"method": method, "url": url}
+    return entry
+
+
+def _verify_references(bundle: dict[str, Any]) -> list[str]:
+    """Walk the bundle and return any references that don't resolve to a
+    ``fullUrl`` in the same bundle.
+
+    Only checks ``urn:uuid:`` references — relative references (``Patient/123``)
+    are valid in transaction bundles when resolved server-side and we don't
+    re-implement that here.
+    """
+    full_urls: set[str] = {
+        e.get("fullUrl") for e in bundle.get("entry", []) if e.get("fullUrl")
+    }
+    dangling: list[str] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            ref = node.get("reference")
+            if isinstance(ref, str) and ref.startswith("urn:uuid:") and ref not in full_urls:
+                dangling.append(ref)
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(bundle)
+    return dangling
+
+
+def build_bundle(
+    events: list[CanonicalEvent], *, config: FhirConfig
+) -> dict[str, Any]:
+    """Build a FHIR R4 Bundle from a list of qualified events."""
+    entries: list[dict[str, Any]] = []
+    include = set(config.include)
+    obs_full_urls: list[str] = []  # populated when Provenance is included
+
+    # Unique Patient resources (one per subject_id).
+    seen_patients: set[str] = set()
+    if "Patient" in include:
+        for ev in events:
+            sid = ev.subject_id or ""
+            if not sid or sid in seen_patients:
+                continue
+            seen_patients.add(sid)
+            patient = _build_patient(sid)
+            entries.append(_entry(patient["id"], patient, bundle_type=config.bundle_type))
+
+    # Unique Device resources (one per (source, device) pair) — emitted before
+    # observations so device.reference inside an Observation always resolves.
+    seen_devices: set[tuple[str, str]] = set()
+    if "Device" in include:
+        for ev in events:
+            src = ev.context.source or ""
+            dev = ev.context.device or ""
+            if not src or not dev:
+                continue
+            key = (src, dev)
+            if key in seen_devices:
+                continue
+            seen_devices.add(key)
+            device = _build_device(src, dev)
+            entries.append(_entry(device["id"], device, bundle_type=config.bundle_type))
+
+    # Observations / QuestionnaireResponses — one resource per event.
+    if "Observation" in include:
+        for ev in events:
+            patient_id = subject_uuid(ev.subject_id or "")
+            dev_uuid = (
+                device_uuid(ev.context.source, ev.context.device)
+                if "Device" in include and ev.context.source and ev.context.device
+                else None
+            )
+            if ev.type in (
+                EventType.MEASUREMENT,
+                EventType.OBSERVATION,
+                EventType.EVENT,
+                EventType.SESSION,
+                EventType.SUMMARY,
+            ):
+                obs = _build_observation(
+                    ev, patient_uuid=patient_id, device_uuid_value=dev_uuid
+                )
+                obs_uuid = observation_uuid(ev.event_id)
+                entries.append(_entry(obs_uuid, obs, bundle_type=config.bundle_type))
+                obs_full_urls.append(f"urn:uuid:{obs_uuid}")
+            elif ev.type == EventType.SURVEY:
+                qr = _build_questionnaire_response(ev, patient_uuid=patient_id)
+                qr_uuid = observation_uuid(ev.event_id)
+                entries.append(_entry(qr_uuid, qr, bundle_type=config.bundle_type))
+                obs_full_urls.append(f"urn:uuid:{qr_uuid}")
+
+    # Single Provenance resource pointing at every observation we emitted.
+    if "Provenance" in include and obs_full_urls:
+        # Pick the first event with adapter info; fall back to "harmonia"/"unknown".
+        first = next(
+            (e for e in events if e.provenance.adapter), events[0] if events else None
+        )
+        adapter_id = first.provenance.adapter if first and first.provenance.adapter else "harmonia"
+        adapter_version = (
+            first.provenance.adapter_version
+            if first and first.provenance.adapter_version
+            else "unknown"
+        )
+        recorded_at = (
+            first.provenance.ingested_at
+            if first and first.provenance.ingested_at
+            else CanonicalEvent.now_iso()
+        )
+        prov = _build_provenance(
+            target_full_urls=obs_full_urls,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+            recorded_at=recorded_at,
+        )
+        entries.append(_entry(prov["id"], prov, bundle_type=config.bundle_type))
+
+    bundle = {
+        "resourceType": "Bundle",
+        "type": config.bundle_type,
+        "entry": entries,
+    }
+    bundle["__dangling_refs"] = _verify_references(bundle)
+    return bundle

@@ -16,7 +16,7 @@ import yaml
 
 from domain.models import CanonicalEvent
 
-from . import adapter, cleaner, connector, qualifier, validator
+from . import adapter, cleaner, connector, fhir, qualifier, validator
 from .adapter.config_adapter import ConfigAdapter
 
 __all__ = ["run_pipeline"]
@@ -54,4 +54,6 @@ def run_pipeline(
     validated = validator.run(cleaned, config=config_adapter.validate_block)
     qualified, stats = qualifier.run(validated, config=config_adapter.qualify_block)
     _strip_quality_overrides(qualified)
-    return qualified, stats
+    standardized, fhir_stats = fhir.run(qualified, config=config_adapter.fhir_block)
+    stats.update(fhir_stats)
+    return standardized, stats

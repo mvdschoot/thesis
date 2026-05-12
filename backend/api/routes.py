@@ -227,7 +227,16 @@ def transform(req: TransformRequest) -> TransformResponse:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    fhir_stats = stats.pop("fhir", None)
+    bundle = fhir_stats.get("bundle") if isinstance(fhir_stats, dict) else None
+    if isinstance(fhir_stats, dict):
+        # Surface counts/size in stats for the UI; the bundle itself moves to
+        # a top-level field so the frontend can render it without spelunking.
+        stats["fhir.resource_count"] = fhir_stats.get("resource_count", 0)
+        stats["fhir.size_bytes"] = fhir_stats.get("size_bytes", 0)
+
     return TransformResponse(
         events=[e.to_dict() for e in events],
         stats=stats,
+        bundle=bundle,
     )
