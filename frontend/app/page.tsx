@@ -72,6 +72,7 @@ export default function Page() {
 
   // Concept-mapping state (session-only, sent on each /api/transform call).
   const [conceptMappings, setConceptMappings] = useState<Record<string, Coding>>({});
+  const [conceptNoMatches, setConceptNoMatches] = useState<Record<string, import("@/lib/api").NoMatchSlot>>({});
 
   // Config matching state — populated by /api/configs/match against the current input.
   const [configMatches, setConfigMatches] = useState<ConfigMatch[] | null>(null);
@@ -350,6 +351,7 @@ export default function Page() {
       // dataset; re-runs from the Concepts tab keep the current picks.
       if (!opts?.preserveConcepts) {
         setConceptMappings({});
+        setConceptNoMatches({});
       }
       const res = await transform({
         data: inputData,
@@ -375,6 +377,14 @@ export default function Page() {
       else next[key] = coding;
       return next;
     });
+  }
+
+  function handleBulkConceptChange(newMappings: Record<string, Coding>) {
+    setConceptMappings((prev) => ({ ...prev, ...newMappings }));
+  }
+
+  function handleNoMatchesChange(newNoMatches: Record<string, import("@/lib/api").NoMatchSlot>) {
+    setConceptNoMatches((prev) => ({ ...prev, ...newNoMatches }));
   }
 
   const configIds = useMemo(() => {
@@ -517,6 +527,9 @@ export default function Page() {
             conceptSlots={conceptSlots}
             conceptMappings={conceptMappings}
             onConceptChange={handleConceptChange}
+            onBulkConceptChange={handleBulkConceptChange}
+            conceptNoMatches={conceptNoMatches}
+            onNoMatchesChange={handleNoMatchesChange}
             onRerunWithConcepts={() => handleRun({ preserveConcepts: true })}
             rerunning={running}
             adapterDiagnostics={adapterDiagnostics}

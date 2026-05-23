@@ -252,6 +252,63 @@ def build_fix_user_prompt(
     return "\n".join(parts)
 
 
+def build_concept_suggest_system_prompt() -> str:
+    return (
+        "You are a clinical terminology specialist. Your task is to map health-data "
+        "concept slots to standard FHIR coding systems.\n\n"
+        "You have a `search_terminology` tool. Use it to find the best code for each slot:\n"
+        "- For **code** and **component** slots: search `loinc` first. If LOINC has no "
+        "good match, try `snomed`.\n"
+        "- For **unit** slots: search `ucum`.\n"
+        "- Skip **category** slots — they already have defaults.\n\n"
+        "CRITICAL RULE: You MUST NEVER invent, guess, or recall codes from memory. "
+        "Every code you return MUST be copied verbatim (system, code, and display) from "
+        "a `search_terminology` tool result. Do NOT fabricate codes.\n\n"
+        "Strategy:\n"
+        "1. Read the slot list.\n"
+        "2. Call `search_terminology` for each slot. Try multiple search queries if the "
+        "first returns poor results (synonyms, abbreviations, broader/narrower terms).\n"
+        "3. From the tool results, ALWAYS pick the single best match per slot — even if "
+        "the match is imperfect. Copy the `system`, `code`, and `display` fields exactly "
+        "as returned by the tool. Use the confidence level to indicate match quality.\n"
+        "4. Only put a slot in `no_matches` if the tool returned ZERO results across all "
+        "your search attempts for that slot.\n"
+        "5. For each suggestion, assess confidence:\n"
+        "   - **high**: the returned code's display closely matches the slot label AND "
+        "the code is semantically correct for the measured concept.\n"
+        "   - **medium**: the best available code is related but not an exact match "
+        "(e.g. a broader concept, or a partial overlap in meaning).\n"
+        "   - **low**: the best available code is a stretch — the user should review "
+        "and likely replace it.\n\n"
+        "Respond with ONLY a JSON object with two top-level keys:\n"
+        '  "suggestions": maps slot keys to codings with confidence:\n'
+        '    {"<key>": {"system": "<uri>", "code": "<code>", "display": "<name>", '
+        '"confidence": "high"|"medium"|"low"}, ...}\n'
+        '  "no_matches": maps slot keys where no standard code exists to a reason:\n'
+        '    {"<key>": {"reason": "<why no code exists>"}, ...}\n\n'
+        "Every non-category slot MUST appear in exactly one of `suggestions` or `no_matches`.\n"
+        "Output only the JSON object — no markdown fencing, no prose."
+    )
+
+
+def build_concept_suggest_user_prompt(slots: list[dict[str, Any]]) -> str:
+    lines = ["Map the following concept slots to standard terminology codes. You should also try synonyms, abbreviations, abbr. expansions and the like. Concept slots:\n"]
+    for i, s in enumerate(slots, 1):
+        sample_parts = []
+        if s.get("sample"):
+            sv = s["sample"]
+            if sv.get("value") is not None:
+                sample_parts.append(f"value={sv['value']}")
+            if sv.get("unit"):
+                sample_parts.append(f"unit={sv['unit']}")
+        sample_str = f", sample: {{{', '.join(sample_parts)}}}" if sample_parts else ""
+        lines.append(
+            f'{i}. key="{s["key"]}", kind={s["kind"]}, label="{s["label"]}", '
+            f'count={s["count"]}{sample_str}'
+        )
+    return "\n".join(lines)
+
+
 def strip_code_fence(text: str) -> str:
     """Strip a leading ```yaml / ```yml / ``` fence and trailing ``` if present."""
     t = text.strip()

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
-import type { AdapterDiagnostics } from "@/lib/api";
+import type { AdapterDiagnostics, NoMatchSlot } from "@/lib/api";
 import type { CanonicalEvent, Coding, ConceptSlot, FhirBundle } from "@/lib/types";
 
 import ConceptsPanel from "./ConceptsPanel";
@@ -20,6 +20,9 @@ interface Props {
   conceptSlots: ConceptSlot[];
   conceptMappings: Record<string, Coding>;
   onConceptChange: (key: string, coding: Coding | null) => void;
+  onBulkConceptChange: (mappings: Record<string, Coding>) => void;
+  conceptNoMatches: Record<string, NoMatchSlot>;
+  onNoMatchesChange: (noMatches: Record<string, NoMatchSlot>) => void;
   onRerunWithConcepts: () => void;
   rerunning: boolean;
   adapterDiagnostics?: AdapterDiagnostics | null;
@@ -37,6 +40,9 @@ export default function ResultsPanel({
   conceptSlots,
   conceptMappings,
   onConceptChange,
+  onBulkConceptChange,
+  conceptNoMatches,
+  onNoMatchesChange,
   onRerunWithConcepts,
   rerunning,
   adapterDiagnostics,
@@ -165,7 +171,10 @@ export default function ResultsPanel({
         <ConceptsPanel
           slots={conceptSlots}
           mappings={conceptMappings}
+          noMatches={conceptNoMatches}
           onChange={onConceptChange}
+          onBulkChange={onBulkConceptChange}
+          onNoMatchesChange={onNoMatchesChange}
           onRerun={onRerunWithConcepts}
           running={rerunning}
         />

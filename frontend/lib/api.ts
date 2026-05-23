@@ -174,6 +174,20 @@ export function matchConfigs(data: string, format: TransformFormat, source?: str
   return post<ConfigMatch[]>("/api/configs/match", { data, format, source });
 }
 
+export interface NoMatchSlot {
+  reason: string;
+}
+
+export interface SuggestConceptsResponse {
+  suggestions: Record<string, import("./types").Coding>;
+  no_matches: Record<string, NoMatchSlot>;
+  errors: string[];
+}
+
+export function suggestConcepts(slots: import("./types").ConceptSlot[]) {
+  return post<SuggestConceptsResponse>("/api/suggest-concepts", { slots });
+}
+
 export function searchTerminology(
   system: TerminologySystem,
   q: string,

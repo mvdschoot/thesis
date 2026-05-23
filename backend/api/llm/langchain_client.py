@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
+from typing import Any
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 class LangChainClient:
@@ -50,10 +55,49 @@ class LangChainClient:
         msg = self._llm.invoke(
             [SystemMessage(content=system), HumanMessage(content=user)]
         )
+        return self._extract_text(msg)
+
+    def generate_with_tools(
+        self,
+        system: str,
+        user: str,
+        tools: list[BaseTool],
+        *,
+        max_iterations: int = 10,
+    ) -> str:
+        """Run an agentic tool-calling loop until the model produces a text answer."""
+        llm_with_tools = self._llm.bind_tools(tools)
+        messages: list[Any] = [SystemMessage(content=system), HumanMessage(content=user)]
+        tools_by_name = {t.name: t for t in tools}
+
+        for i in range(max_iterations):
+            response = llm_with_tools.invoke(messages)
+            messages.append(response)
+
+            if not response.tool_calls:
+                return self._extract_text(response)
+
+            for tc in response.tool_calls:
+                tool_fn = tools_by_name.get(tc["name"])
+                if tool_fn is None:
+                    result = f"Unknown tool: {tc['name']}"
+                else:
+                    try:
+                        result = tool_fn.invoke(tc["args"])
+                    except Exception as exc:
+                        logger.warning("tool %s failed: %s", tc["name"], exc)
+                        result = f"Tool error: {exc}"
+                messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+
+        messages.append(HumanMessage(content="Provide your final answer now as JSON."))
+        response = llm_with_tools.invoke(messages)
+        return self._extract_text(response)
+
+    @staticmethod
+    def _extract_text(msg: Any) -> str:
         content = msg.content
         if isinstance(content, str):
             return content
-        # Some providers return a list of content blocks
         parts: list[str] = []
         for block in content:
             if isinstance(block, str):

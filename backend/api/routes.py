@@ -23,12 +23,16 @@ from .llm.client import LLMClient
 from .llm.langchain_client import LangChainClient
 from .models import (
     AdapterDiagnosticsOut,
+    Coding,
     ConfigMatch,
     ConfigMatchAdapterInfo,
     GenerateConfigRequest,
     GenerateConfigResponse,
     InputFormat,
     MatchConfigsRequest,
+    NoMatchSlot,
+    SuggestConceptsRequest,
+    SuggestConceptsResponse,
     SuggestFixRequest,
     SuggestFixResponse,
     TerminologySearchResult,
@@ -37,6 +41,8 @@ from .models import (
     UpdateConfigRequest,
 )
 from .prompts import (
+    build_concept_suggest_system_prompt,
+    build_concept_suggest_user_prompt,
     build_fix_system_prompt,
     build_fix_user_prompt,
     build_system_prompt,
@@ -342,3 +348,124 @@ def terminology_search(
     except TerminologyError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return [TerminologySearchResult(**r) for r in results]
+
+
+# ─── /suggest-concepts (LLM-driven terminology mapping) ───────────────────
+
+@router.post("/suggest-concepts", response_model=SuggestConceptsResponse)
+def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
+    """Use the LLM + OmopHub tool calling to suggest terminology codes for concept slots."""
+    non_category = [s for s in req.slots if s.kind != "category"]
+    if not non_category:
+        return SuggestConceptsResponse()
+
+    valid_keys = {s.key for s in non_category}
+    slot_dicts = [s.model_dump() for s in non_category]
+
+    try:
+        client = LangChainClient()
+    except RuntimeError as e:
+        return SuggestConceptsResponse(errors=[f"LLM unavailable: {e}"])
+
+    from .llm.tools import search_terminology as _raw_search_tool
+
+    seen_codes: set[tuple[str, str]] = set()
+
+    from langchain_core.tools import tool as _tool_decorator
+
+    @_tool_decorator
+    def search_terminology(system: str, query: str) -> str:
+        """Search medical terminology databases for standard codes.
+
+        Args:
+            system: The terminology to search. One of "loinc", "ucum", "snomed".
+            query: Natural-language search terms.
+
+        Returns:
+            JSON array of matching concepts with system, code, and display.
+        """
+        result = _raw_search_tool.invoke({"system": system, "query": query})
+        try:
+            items = _json.loads(result)
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict) and item.get("code"):
+                        seen_codes.add((item.get("system", ""), item["code"]))
+        except _json.JSONDecodeError:
+            pass
+        return result
+
+    system = build_concept_suggest_system_prompt()
+    user = build_concept_suggest_user_prompt(slot_dicts)
+
+    errors: list[str] = []
+    try:
+        raw = client.generate_with_tools(system, user, tools=[search_terminology])
+    except Exception as e:
+        logger.exception("LLM concept suggestion failed")
+        return SuggestConceptsResponse(errors=[f"LLM error: {e}"])
+
+    raw = raw.strip()
+    if raw.startswith("```"):
+        first_nl = raw.find("\n")
+        if first_nl != -1:
+            raw = raw[first_nl + 1:]
+        if raw.rstrip().endswith("```"):
+            raw = raw.rstrip()[:-3].rstrip()
+
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError:
+        return SuggestConceptsResponse(errors=["LLM returned unparseable response."])
+
+    if not isinstance(parsed, dict):
+        return SuggestConceptsResponse(errors=["LLM returned non-object response."])
+
+    if "suggestions" in parsed and isinstance(parsed["suggestions"], dict):
+        raw_suggestions = parsed["suggestions"]
+        raw_no_matches = parsed.get("no_matches", {})
+        if not isinstance(raw_no_matches, dict):
+            raw_no_matches = {}
+    else:
+        raw_suggestions = parsed
+        raw_no_matches = {}
+
+    suggestions: dict[str, Coding] = {}
+    for key, val in raw_suggestions.items():
+        if key not in valid_keys:
+            continue
+        if not isinstance(val, dict):
+            continue
+        if not val.get("system") or not val.get("code"):
+            continue
+        confidence = val.get("confidence")
+        if confidence not in ("high", "medium", "low"):
+            confidence = None
+        suggestions[key] = Coding(
+            system=val["system"],
+            code=val["code"],
+            display=val.get("display"),
+            confidence=confidence,
+        )
+
+    hallucinated = [
+        k for k, c in suggestions.items()
+        if (c.system, c.code) not in seen_codes
+    ]
+    for k in hallucinated:
+        logger.warning("Dropping hallucinated code %s for slot %s", suggestions[k].code, k)
+        del suggestions[k]
+
+    no_matches: dict[str, NoMatchSlot] = {}
+    for key, val in raw_no_matches.items():
+        if key not in valid_keys:
+            continue
+        if not isinstance(val, dict):
+            continue
+        no_matches[key] = NoMatchSlot(reason=val.get("reason", "No standard code found."))
+
+    if len(suggestions) + len(no_matches) < len(non_category):
+        unmapped = len(non_category) - len(suggestions) - len(no_matches)
+        errors.append(f"{unmapped} slot(s) could not be mapped automatically.")
+
+    return SuggestConceptsResponse(suggestions=suggestions, no_matches=no_matches, errors=errors)

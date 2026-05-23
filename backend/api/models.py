@@ -52,6 +52,7 @@ class Coding(BaseModel):
     system: str
     code: str
     display: str | None = None
+    confidence: Literal["high", "medium", "low"] | None = None
 
 
 class ConceptSlot(BaseModel):
@@ -135,6 +136,21 @@ class SuggestFixRequest(BaseModel):
 
 class SuggestFixResponse(BaseModel):
     yaml: str
+
+
+class SuggestConceptsRequest(BaseModel):
+    slots: list[ConceptSlot]
+
+
+class NoMatchSlot(BaseModel):
+    """A concept slot where the LLM determined no standard code exists."""
+    reason: str
+
+
+class SuggestConceptsResponse(BaseModel):
+    suggestions: dict[str, Coding] = Field(default_factory=dict)
+    no_matches: dict[str, NoMatchSlot] = Field(default_factory=dict)
+    errors: list[str] = Field(default_factory=list)
 
 
 class TerminologySearchResult(BaseModel):

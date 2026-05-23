@@ -2,14 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { searchTerminology, type TerminologySystem } from "@/lib/api";
+import { searchTerminology, suggestConcepts, type NoMatchSlot, type TerminologySystem } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { Coding, ConceptSlot, ConceptSlotKind } from "@/lib/types";
 
 interface Props {
   slots: ConceptSlot[];
   mappings: Record<string, Coding>;
+  noMatches: Record<string, NoMatchSlot>;
   onChange: (key: string, coding: Coding | null) => void;
+  onBulkChange: (mappings: Record<string, Coding>) => void;
+  onNoMatchesChange: (noMatches: Record<string, NoMatchSlot>) => void;
   onRerun: () => void;
   running: boolean;
 }
@@ -75,10 +78,15 @@ function formatSample(slot: ConceptSlot): string {
 export default function ConceptsPanel({
   slots,
   mappings,
+  noMatches,
   onChange,
+  onBulkChange,
+  onNoMatchesChange,
   onRerun,
   running,
 }: Props) {
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const grouped = useMemo(() => {
     const g: Record<ConceptSlotKind, ConceptSlot[]> = {
       code: [],
@@ -99,6 +107,31 @@ export default function ConceptsPanel({
       ).length,
     [slots, mappings],
   );
+
+  async function handleSuggest() {
+    const unbound = slots.filter(
+      (s) => s.kind !== "category" && !mappings[s.key],
+    );
+    if (unbound.length === 0) return;
+    setSuggesting(true);
+    setSuggestError(null);
+    try {
+      const res = await suggestConcepts(unbound);
+      if (Object.keys(res.suggestions).length > 0) {
+        onBulkChange(res.suggestions);
+      }
+      if (Object.keys(res.no_matches).length > 0) {
+        onNoMatchesChange(res.no_matches);
+      }
+      if (res.errors.length > 0) {
+        setSuggestError(res.errors.join("; "));
+      }
+    } catch (e: unknown) {
+      setSuggestError(e instanceof Error ? e.message : "Suggestion failed.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   if (slots.length === 0) {
     return (
@@ -126,6 +159,14 @@ export default function ConceptsPanel({
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button
+            className="btn"
+            onClick={handleSuggest}
+            disabled={suggesting || running || unboundCount === 0}
+            title="Use AI to suggest terminology codes for all unbound slots"
+          >
+            {suggesting ? "Suggesting…" : "Suggest with AI"}
+          </button>
+          <button
             className="btn primary"
             onClick={onRerun}
             disabled={running}
@@ -142,6 +183,18 @@ export default function ConceptsPanel({
           repetitive, so a single LOINC code covers most events. Free-search slots
           query OMOPHub (LOINC / UCUM / SNOMED CT); category uses the fixed FHIR value set.
         </p>
+        {suggestError && (
+          <div
+            className="qflag warn"
+            style={{ marginBottom: 12 }}
+          >
+            <div className="qf-bar" />
+            <div>
+              <div className="qf-code">AI_SUGGEST</div>
+              <div className="qf-msg">{suggestError}</div>
+            </div>
+          </div>
+        )}
         {(["code", "unit", "component", "category"] as ConceptSlotKind[]).map((kind) => {
           const rows = grouped[kind];
           if (rows.length === 0) return null;
@@ -162,6 +215,7 @@ export default function ConceptsPanel({
                     key={slot.key}
                     slot={slot}
                     coding={mappings[slot.key] ?? null}
+                    noMatch={noMatches[slot.key] ?? null}
                     onChange={(c) => onChange(slot.key, c)}
                   />
                 ))}
@@ -177,10 +231,11 @@ export default function ConceptsPanel({
 interface SlotRowProps {
   slot: ConceptSlot;
   coding: Coding | null;
+  noMatch: NoMatchSlot | null;
   onChange: (coding: Coding | null) => void;
 }
 
-function SlotRow({ slot, coding, onChange }: SlotRowProps) {
+function SlotRow({ slot, coding, noMatch, onChange }: SlotRowProps) {
   const [open, setOpen] = useState(false);
   const effective = coding ?? slot.default_coding ?? null;
 
@@ -203,6 +258,8 @@ function SlotRow({ slot, coding, onChange }: SlotRowProps) {
         <div style={{ flex: "1 1 260px", minWidth: 0 }}>
           {effective ? (
             <CodingChip coding={effective} pinned={!!coding} />
+          ) : noMatch ? (
+            <span className="chip info" title={noMatch.reason}>no standard code</span>
           ) : (
             <span className="chip warn">unbound</span>
           )}
@@ -215,6 +272,25 @@ function SlotRow({ slot, coding, onChange }: SlotRowProps) {
             />
           ) : (
             <>
+              {noMatch && !coding && (
+                <button
+                  className="btn tiny"
+                  onClick={() => {
+                    const slug = slot.label
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-|-$/g, "");
+                    onChange({
+                      system: "urn:harmonization:local",
+                      code: slug,
+                      display: slot.label,
+                    });
+                  }}
+                  title={`Create local coding: urn:harmonization:local|${slot.label}`}
+                >
+                  Use local coding
+                </button>
+              )}
               <button
                 className={cx("btn tiny", open && "primary")}
                 onClick={() => setOpen((v) => !v)}
@@ -255,15 +331,33 @@ function CodingChip({ coding, pinned }: { coding: Coding; pinned: boolean }) {
   const system = coding.system
     .replace("http://", "")
     .replace("https://", "")
+    .replace("urn:harmonization:", "")
     .replace("terminology.hl7.org/CodeSystem/", "");
+
+  const conf = coding.confidence;
+  let chipClass: string;
+  if (!pinned) {
+    chipClass = "info";
+  } else if (!conf || conf === "high") {
+    chipClass = "accent";
+  } else if (conf === "medium") {
+    chipClass = "warn";
+  } else {
+    chipClass = "err";
+  }
+
+  const confLabel = conf && conf !== "high" ? ` [${conf} confidence]` : "";
+
   return (
     <span
-      className={cx("chip mono", pinned ? "accent" : "info")}
-      title={`${coding.system} · ${coding.code}`}
+      className={cx("chip mono", chipClass)}
+      title={`${coding.system} · ${coding.code}${confLabel}`}
       style={{ maxWidth: "100%" }}
     >
+      {conf === "low" && "⚠ "}
       {system} · {coding.code}
       {coding.display ? ` · ${coding.display}` : ""}
+      {conf === "medium" && " ?"}
     </span>
   );
 }

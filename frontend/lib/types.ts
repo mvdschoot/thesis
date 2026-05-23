@@ -233,6 +233,7 @@ export interface Coding {
   system: string;
   code: string;
   display?: string | null;
+  confidence?: "high" | "medium" | "low" | null;
 }
 
 export type ConceptSlotKind = "code" | "unit" | "component" | "category";
