@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from domain.models import CanonicalEvent, SourceMetadata
+
+if TYPE_CHECKING:
+    from .diagnostics import DiagnosticsCollector
 
 
 class BaseAdapter(ABC):
@@ -39,7 +42,15 @@ class BaseAdapter(ABC):
 
     @abstractmethod
     def transform(
-        self, metadata: SourceMetadata, record: dict[str, Any]
+        self,
+        metadata: SourceMetadata,
+        record: dict[str, Any],
+        *,
+        collector: "DiagnosticsCollector | None" = None,
     ) -> list[CanonicalEvent]:
-        """Transform a single source record into one or more canonical events."""
+        """Transform a single source record into one or more canonical events.
+
+        `collector` is optional — subclasses may ignore it. When passed, it
+        records per-rule and per-record skip reasons for diagnostics.
+        """
         ...

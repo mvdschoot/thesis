@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
+import type { AdapterDiagnostics } from "@/lib/api";
 import type { CanonicalEvent, Coding, ConceptSlot, FhirBundle } from "@/lib/types";
 
 import ConceptsPanel from "./ConceptsPanel";
+import DebugPanel from "./DebugPanel";
 import EventDrawer from "./EventDrawer";
 import EventStats from "./EventStats";
 import EventTable from "./EventTable";
@@ -20,9 +22,13 @@ interface Props {
   onConceptChange: (key: string, coding: Coding | null) => void;
   onRerunWithConcepts: () => void;
   rerunning: boolean;
+  adapterDiagnostics?: AdapterDiagnostics | null;
+  yamlText: string;
+  inputData: unknown;
+  onApplyYaml: (yaml: string) => void;
 }
 
-type View = "events" | "concepts" | "fhir";
+type View = "events" | "concepts" | "fhir" | "debug";
 
 export default function ResultsPanel({
   events,
@@ -33,6 +39,10 @@ export default function ResultsPanel({
   onConceptChange,
   onRerunWithConcepts,
   rerunning,
+  adapterDiagnostics,
+  yamlText,
+  inputData,
+  onApplyYaml,
 }: Props) {
   const [view, setView] = useState<View>("events");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,6 +57,13 @@ export default function ResultsPanel({
       ).length,
     [conceptSlots, conceptMappings],
   );
+
+  const debugAlert = useMemo(() => {
+    if (!adapterDiagnostics) return false;
+    if (adapterDiagnostics.records_unmatched > 0) return true;
+    if (adapterDiagnostics.events_emitted === 0) return true;
+    return adapterDiagnostics.rules.some((r) => r.events_emitted === 0);
+  }, [adapterDiagnostics]);
 
   return (
     <div>
@@ -90,11 +107,55 @@ export default function ResultsPanel({
         >
           FHIR Bundle{bundle ? ` (${bundle.entry?.length ?? 0})` : ""}
         </button>
+        <button
+          className={cx("btn", view === "debug" && "primary")}
+          onClick={() => setView("debug")}
+          title="Why did the adapter emit (or not emit) events? Per-rule diagnostics + LLM-suggested fix."
+        >
+          Debug
+          {debugAlert && (
+            <span
+              aria-label="issues detected"
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "oklch(0.55 0.21 25)",
+                marginLeft: 6,
+                verticalAlign: "middle",
+              }}
+            />
+          )}
+        </button>
       </div>
 
       {view === "events" && (
         <>
           <EventStats events={events} />
+          {events.length === 0 && adapterDiagnostics && (
+            <div className="card" style={{ marginTop: 16, padding: "12px 16px" }}>
+              <div style={{ fontSize: 13 }}>
+                <strong>0 events emitted.</strong>{" "}
+                <button
+                  type="button"
+                  onClick={() => setView("debug")}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--accent, #1f6feb)",
+                    cursor: "pointer",
+                    padding: 0,
+                    textDecoration: "underline",
+                    font: "inherit",
+                  }}
+                >
+                  Open the Debug tab
+                </button>{" "}
+                to see which match clause or emit rule failed.
+              </div>
+            </div>
+          )}
           <EventTable events={events} selectedId={selectedId} onSelect={setSelectedId} />
           <EventDrawer event={selected} onClose={() => setSelectedId(null)} />
         </>
@@ -111,6 +172,15 @@ export default function ResultsPanel({
       )}
 
       {view === "fhir" && <FhirBundlePanel bundle={bundle} />}
+
+      {view === "debug" && (
+        <DebugPanel
+          diagnostics={adapterDiagnostics}
+          yamlText={yamlText}
+          sampleRecord={inputData}
+          onApplyYaml={onApplyYaml}
+        />
+      )}
     </div>
   );
 }

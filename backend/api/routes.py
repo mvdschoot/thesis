@@ -22,18 +22,27 @@ from .configs_store import ConfigPayload, ConfigStoreError, ConfigSummary
 from .llm.client import LLMClient
 from .llm.langchain_client import LangChainClient
 from .models import (
+    AdapterDiagnosticsOut,
     ConfigMatch,
     ConfigMatchAdapterInfo,
     GenerateConfigRequest,
     GenerateConfigResponse,
     InputFormat,
     MatchConfigsRequest,
+    SuggestFixRequest,
+    SuggestFixResponse,
     TerminologySearchResult,
     TransformRequest,
     TransformResponse,
     UpdateConfigRequest,
 )
-from .prompts import build_system_prompt, build_user_prompt, strip_code_fence
+from .prompts import (
+    build_fix_system_prompt,
+    build_fix_user_prompt,
+    build_system_prompt,
+    build_user_prompt,
+    strip_code_fence,
+)
 from .terminology import TerminologyError, get_client as get_terminology_client
 
 logger = logging.getLogger(__name__)
@@ -226,7 +235,7 @@ def transform(req: TransformRequest) -> TransformResponse:
     )
 
     try:
-        events, stats = run_pipeline(
+        events, stats, adapter_diagnostics = run_pipeline(
             data=req.data,
             yaml_text=req.yaml,
             source=req.source,
@@ -258,7 +267,58 @@ def transform(req: TransformRequest) -> TransformResponse:
         stats=stats,
         bundle=bundle,
         concept_slots=concept_slots,
+        adapter_diagnostics=AdapterDiagnosticsOut.model_validate(
+            adapter_diagnostics.to_dict()
+        ),
     )
+
+
+# ─── /suggest-config-fix ────────────────────────────────────────────────────
+
+@router.post("/suggest-config-fix", response_model=SuggestFixResponse)
+def suggest_config_fix(req: SuggestFixRequest) -> SuggestFixResponse:
+    """LLM-patch a failing adapter config given diagnostics + a sample record.
+
+    Same client/few-shot corpus as `/api/generate-config`; the system prompt
+    differs only in framing (repair vs. generate). Does NOT save the result —
+    the frontend previews the patched YAML and lets the user decide before
+    applying it to the editor.
+    """
+    try:
+        client = _get_llm_client()
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    system = build_fix_system_prompt()
+    user = build_fix_user_prompt(
+        yaml_text=req.yaml,
+        diagnostics=req.diagnostics.model_dump(),
+        sample_record=req.sample_record,
+        description=req.description,
+    )
+
+    try:
+        raw = client.generate(system=system, user=user)
+    except Exception as e:
+        logger.exception("LLM fix-suggestion failed")
+        raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
+    yaml_text = strip_code_fence(raw)
+    try:
+        parsed = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=502, detail=f"LLM returned invalid YAML: {e}")
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="LLM returned non-mapping YAML.")
+    try:
+        ConfigAdapter.from_dict(parsed)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM returned a YAML missing required sections: {e}",
+        )
+
+    return SuggestFixResponse(yaml=yaml_text)
 
 
 # ─── /terminology/search (NLM Clinical Tables proxy) ────────────────────────

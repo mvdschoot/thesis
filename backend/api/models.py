@@ -81,11 +81,60 @@ class TransformRequest(BaseModel):
     )
 
 
+class SkippedReasonOut(BaseModel):
+    """One reason a record (or part of it) failed to produce an event in the
+    adapter stage. Surfaced to the UI so the user can fix the LLM-generated
+    YAML config."""
+    code: str
+    record_index: int
+    detail: str
+    rule_id: str | None = None
+    path: str | None = None
+    expected: Any = None
+    actual: Any = None
+    record_keys: list[str] | None = None
+
+
+class RuleDiagnosticOut(BaseModel):
+    rule_id: str
+    records_seen: int
+    events_emitted: int
+    skipped_reasons: list[SkippedReasonOut] = Field(default_factory=list)
+
+
+class AdapterDiagnosticsOut(BaseModel):
+    records_total: int
+    records_matched: int
+    records_unmatched: int
+    events_emitted: int
+    rules: list[RuleDiagnosticOut] = Field(default_factory=list)
+    predicate_failures: list[SkippedReasonOut] = Field(default_factory=list)
+
+
 class TransformResponse(BaseModel):
     events: list[dict[str, Any]]
     stats: dict[str, Any]
     bundle: dict[str, Any] | None = None
     concept_slots: list[ConceptSlot] = Field(default_factory=list)
+    adapter_diagnostics: AdapterDiagnosticsOut | None = None
+
+
+class SuggestFixRequest(BaseModel):
+    yaml: str = Field(..., description="The current (failing) YAML config.")
+    diagnostics: AdapterDiagnosticsOut = Field(
+        ..., description="Diagnostics from the most recent /api/transform call."
+    )
+    sample_record: Any = Field(
+        ..., description="One record from the input that the config failed on."
+    )
+    description: str = Field(
+        default="",
+        description="Optional free-text describing the data/source for the LLM.",
+    )
+
+
+class SuggestFixResponse(BaseModel):
+    yaml: str
 
 
 class TerminologySearchResult(BaseModel):

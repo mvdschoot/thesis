@@ -196,6 +196,62 @@ def build_user_prompt(
     return "\n".join(parts)
 
 
+def build_fix_system_prompt() -> str:
+    """System prompt for the /api/suggest-config-fix LLM call.
+
+    Same DSL + canonical model + few-shot examples as generation, but with an
+    additional instruction: the LLM is patching an existing YAML that emitted
+    0 events, given the diagnostics report and one sample record.
+    """
+    return (
+        "You repair YAML adapter configs for the Progressive Harmonization ETL. "
+        "The user ran a config that emitted zero events (or skipped rules). "
+        "You will be given the failing YAML, a diagnostics report explaining "
+        "which match clauses or emit rules failed, and one sample input record. "
+        "Return a corrected YAML config — the same shape as the original, with "
+        "only the necessary changes to make the failing rules emit events.\n\n"
+        "## Canonical Event model (Python dataclasses — target shape of every emitted event)\n\n"
+        "```python\n" + _load_canonical_model() + "\n```\n\n"
+        "## " + DSL_OVERVIEW + "\n\n"
+        "## Reference configs\n\n"
+        + _load_few_shot()
+    )
+
+
+def build_fix_user_prompt(
+    *,
+    yaml_text: str,
+    diagnostics: dict[str, Any],
+    sample_record: Any,
+    description: str,
+) -> str:
+    parts = [
+        "## Data description (user-supplied)",
+        description.strip() or "(no description provided)",
+        "",
+        "## Failing YAML config",
+        "```yaml",
+        yaml_text.strip(),
+        "```",
+        "",
+        "## Diagnostics report (what went wrong)",
+        "```json",
+        json.dumps(diagnostics, indent=2, default=str),
+        "```",
+        "",
+        "## One sample input record (the failing config was run against records like this)",
+        "```json",
+        _truncate_sample(sample_record),
+        "```",
+        "",
+        "Identify the failing match clauses and emit-rule paths from the diagnostics, "
+        "trace them against the sample record, and return a single corrected YAML "
+        "config. Do not invent fields the sample record doesn't contain — use the "
+        "paths that actually exist. Output only YAML, no prose, no fencing.",
+    ]
+    return "\n".join(parts)
+
+
 def strip_code_fence(text: str) -> str:
     """Strip a leading ```yaml / ```yml / ``` fence and trailing ``` if present."""
     t = text.strip()

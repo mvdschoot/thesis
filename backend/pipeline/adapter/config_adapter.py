@@ -38,6 +38,7 @@ from pipeline.qualifier.config import QualifyConfig
 from pipeline.validator.config import ValidateConfig
 
 from .base import BaseAdapter
+from .diagnostics import DiagnosticsCollector, SkippedReason, top_level_keys
 
 logger = logging.getLogger(__name__)
 
@@ -250,29 +251,39 @@ def _evaluate_predicate(condition: dict[str, Any], record: dict[str, Any]) -> bo
       - type: "object"|"array"|"string"|"number"|"integer"|"boolean"|"null"
       - non_empty: true    — arrays/strings/objects must have length > 0
     """
+    return _explain_predicate(condition, record) is None
+
+
+def _explain_predicate(
+    condition: dict[str, Any], record: dict[str, Any]
+) -> tuple[str, Any, Any] | None:
+    """Return `(verb, expected, actual)` of the first failing clause, or None
+    if the predicate matched. Used both for matching (`_evaluate_predicate`
+    delegates here) and for explaining `can_handle` misses to the user.
+    """
     field = condition["field"]
     value = _resolve_path(record, field)
 
     if "equals" in condition and value != condition["equals"]:
-        return False
+        return ("equals", condition["equals"], value)
     if "in" in condition:
         allowed = condition["in"]
         if not isinstance(allowed, list) or value not in allowed:
-            return False
+            return ("in", allowed, value)
     if "exists" in condition:
         must_exist = bool(condition["exists"])
         if must_exist and value is None:
-            return False
+            return ("exists", True, None)
         if not must_exist and value is not None:
-            return False
+            return ("exists", False, value)
     if "type" in condition and not _check_type(value, condition["type"]):
-        return False
+        return ("type", condition["type"], type(value).__name__ if value is not None else "null")
     if condition.get("non_empty"):
         if value is None:
-            return False
+            return ("non_empty", True, None)
         if isinstance(value, (list, str, dict)) and len(value) == 0:
-            return False
-    return True
+            return ("non_empty", True, value)
+    return None
 
 
 class ConfigAdapter(BaseAdapter):
@@ -341,8 +352,42 @@ class ConfigAdapter(BaseAdapter):
                 return False
         return True
 
+    def explain_no_match(
+        self,
+        metadata: SourceMetadata,
+        record: dict[str, Any],
+        record_index: int,
+    ) -> SkippedReason | None:
+        """Return the first failing match.record clause as a SkippedReason, or
+        None if every clause actually matched (shouldn't happen — caller should
+        only invoke this after `can_handle` returned False).
+        """
+        for condition in self._match.get("record", []):
+            failure = _explain_predicate(condition, record)
+            if failure is not None:
+                verb, expected, actual = failure
+                return SkippedReason(
+                    code="predicate_mismatch",
+                    rule_id=None,
+                    record_index=record_index,
+                    path=condition.get("field"),
+                    detail=(
+                        f"Record failed match.record clause "
+                        f"`{condition.get('field')} {verb} {expected!r}` "
+                        f"(actual: {actual!r})."
+                    ),
+                    expected=expected,
+                    actual=actual,
+                    record_keys=top_level_keys(record),
+                )
+        return None
+
     def transform(
-        self, metadata: SourceMetadata, record: dict[str, Any]
+        self,
+        metadata: SourceMetadata,
+        record: dict[str, Any],
+        *,
+        collector: DiagnosticsCollector | None = None,
     ) -> list[CanonicalEvent]:
         group_id = CanonicalEvent.new_id()
         ingested_at = CanonicalEvent.now_iso()
@@ -351,9 +396,14 @@ class ConfigAdapter(BaseAdapter):
 
         for rule in self._rules:
             rule_id = rule["id"]
+            if collector is not None:
+                collector.start_rule(rule_id)
             events = self._execute_rule(
-                rule, record, metadata, group_id, ingested_at, rule_events
+                rule, record, metadata, group_id, ingested_at, rule_events,
+                collector=collector,
             )
+            if collector is not None:
+                collector.end_rule(rule_id, len(events))
             rule_events[rule_id] = events
             all_events.extend(events)
 
@@ -367,8 +417,11 @@ class ConfigAdapter(BaseAdapter):
         group_id: str,
         ingested_at: str,
         rule_events: dict[str, list[CanonicalEvent]],
+        *,
+        collector: DiagnosticsCollector | None = None,
     ) -> list[CanonicalEvent]:
         events: list[CanonicalEvent] = []
+        rule_id = rule.get("id", "<unnamed>")
 
         parent_id = None
         parent_ref = rule.get("parent")
@@ -376,11 +429,53 @@ class ConfigAdapter(BaseAdapter):
             parent_events = rule_events[parent_ref]
             if parent_events:
                 parent_id = parent_events[0].event_id
+            elif collector is not None:
+                collector.record_skip(
+                    code="parent_rule_empty",
+                    detail=(
+                        f"Rule '{rule_id}' references parent '{parent_ref}' but "
+                        "the parent rule produced 0 events for this record."
+                    ),
+                    path=parent_ref,
+                )
 
         iterate_path = rule.get("iterate")
         if iterate_path and not iterate_path.startswith("@"):
             items = _resolve_path(record, iterate_path)
-            if isinstance(items, list):
+            if items is None:
+                if collector is not None:
+                    collector.record_skip(
+                        code="iterate_path_none",
+                        detail=(
+                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            "did not resolve in this record."
+                        ),
+                        path=iterate_path,
+                        record_keys=top_level_keys(record),
+                    )
+            elif not isinstance(items, list):
+                if collector is not None:
+                    collector.record_skip(
+                        code="iterate_not_list",
+                        detail=(
+                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            f"resolved to {type(items).__name__} (expected array)."
+                        ),
+                        path=iterate_path,
+                        actual=type(items).__name__,
+                        expected="array",
+                    )
+            elif len(items) == 0:
+                if collector is not None:
+                    collector.record_skip(
+                        code="iterate_empty",
+                        detail=(
+                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            "is an empty array."
+                        ),
+                        path=iterate_path,
+                    )
+            else:
                 for item in items:
                     event = self._build_event(
                         rule, record, metadata, group_id, ingested_at, parent_id, item
@@ -388,9 +483,35 @@ class ConfigAdapter(BaseAdapter):
                     events.append(event)
         elif "iterate_object" in rule:
             obj_spec = rule["iterate_object"]
-            source_obj = _resolve_path(record, obj_spec["source"])
-            if isinstance(source_obj, dict):
-                for entry in obj_spec["entries"]:
+            source_path = obj_spec.get("source")
+            source_obj = _resolve_path(record, source_path) if source_path else None
+            if source_obj is None:
+                if collector is not None:
+                    collector.record_skip(
+                        code="iterate_object_source_none",
+                        detail=(
+                            f"Rule '{rule_id}': iterate_object source "
+                            f"'{source_path}' did not resolve in this record."
+                        ),
+                        path=source_path,
+                        record_keys=top_level_keys(record),
+                    )
+            elif not isinstance(source_obj, dict):
+                if collector is not None:
+                    collector.record_skip(
+                        code="iterate_object_source_not_dict",
+                        detail=(
+                            f"Rule '{rule_id}': iterate_object source "
+                            f"'{source_path}' resolved to {type(source_obj).__name__} "
+                            "(expected object)."
+                        ),
+                        path=source_path,
+                        actual=type(source_obj).__name__,
+                        expected="object",
+                    )
+            else:
+                missing_keys: list[str] = []
+                for entry in obj_spec.get("entries", []):
                     key = entry["key"]
                     if key in source_obj:
                         item = {
@@ -402,6 +523,20 @@ class ConfigAdapter(BaseAdapter):
                             rule, record, metadata, group_id, ingested_at, parent_id, item
                         )
                         events.append(event)
+                    else:
+                        missing_keys.append(key)
+                if not events and missing_keys and collector is not None:
+                    collector.record_skip(
+                        code="iterate_object_keys_missing",
+                        detail=(
+                            f"Rule '{rule_id}': none of the configured "
+                            f"iterate_object entry keys ({missing_keys}) were "
+                            f"present under '{source_path}'."
+                        ),
+                        path=source_path,
+                        expected=missing_keys,
+                        actual=list(source_obj.keys()),
+                    )
         else:
             event = self._build_event(
                 rule, record, metadata, group_id, ingested_at, parent_id, None

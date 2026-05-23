@@ -98,11 +98,50 @@ export interface TransformStats {
   conformance?: Record<string, number>;
 }
 
+export interface SkippedReason {
+  code: string;
+  record_index: number;
+  detail: string;
+  rule_id: string | null;
+  path: string | null;
+  expected: unknown;
+  actual: unknown;
+  record_keys: string[] | null;
+}
+
+export interface RuleDiagnostic {
+  rule_id: string;
+  records_seen: number;
+  events_emitted: number;
+  skipped_reasons: SkippedReason[];
+}
+
+export interface AdapterDiagnostics {
+  records_total: number;
+  records_matched: number;
+  records_unmatched: number;
+  events_emitted: number;
+  rules: RuleDiagnostic[];
+  predicate_failures: SkippedReason[];
+}
+
 export interface TransformResponse {
   events: import("./types").CanonicalEvent[];
   stats: TransformStats;
   bundle: import("./types").FhirBundle | null;
   concept_slots: import("./types").ConceptSlot[];
+  adapter_diagnostics?: AdapterDiagnostics | null;
+}
+
+export interface SuggestFixRequest {
+  yaml: string;
+  diagnostics: AdapterDiagnostics;
+  sample_record: unknown;
+  description?: string;
+}
+
+export interface SuggestFixResponse {
+  yaml: string;
 }
 
 export type TerminologySystem = "loinc" | "ucum" | "snomed";
@@ -113,6 +152,10 @@ export function generateConfig(req: GenerateConfigRequest) {
 
 export function transform(req: TransformRequest) {
   return post<TransformResponse>("/api/transform", req);
+}
+
+export function suggestConfigFix(req: SuggestFixRequest) {
+  return post<SuggestFixResponse>("/api/suggest-config-fix", req);
 }
 
 export function listConfigs() {

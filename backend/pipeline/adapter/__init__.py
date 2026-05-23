@@ -10,9 +10,17 @@ from domain.models import CanonicalEvent, SourceMetadata
 
 from .base import BaseAdapter
 from .config_adapter import ConfigAdapter
+from .diagnostics import AdapterDiagnostics, DiagnosticsCollector
 from .registry import AdapterRegistry
 
-__all__ = ["BaseAdapter", "ConfigAdapter", "AdapterRegistry", "run"]
+__all__ = [
+    "BaseAdapter",
+    "ConfigAdapter",
+    "AdapterRegistry",
+    "AdapterDiagnostics",
+    "DiagnosticsCollector",
+    "run",
+]
 
 logger = logging.getLogger("pipeline.adapter")
 
@@ -23,10 +31,16 @@ def run(
     metadata: SourceMetadata,
     yaml_text: str | None = None,
     adapter: ConfigAdapter | None = None,
+    diagnostics: DiagnosticsCollector | None = None,
 ) -> list[CanonicalEvent]:
     """Run the adapter against `records`. Accepts either pre-parsed
     `adapter` (preferred — caller can reuse it for clean/validate/qualify
     blocks) or raw `yaml_text` for standalone use.
+
+    Pass `diagnostics` (a `DiagnosticsCollector`) to capture per-rule and
+    per-record skip reasons. The collector is mutated in place; callers
+    invoke `.finalize(len(events))` to retrieve the result. Optional —
+    callers that don't pass one behave exactly as before.
     """
     if adapter is None:
         if yaml_text is None:
@@ -39,11 +53,19 @@ def run(
     registry.register(adapter)
 
     events: list[CanonicalEvent] = []
-    for record in records:
+    for idx, record in enumerate(records):
+        if diagnostics is not None:
+            diagnostics.start_record(idx)
         chosen = registry.get_adapter(metadata, record)
         if chosen is None:
+            if diagnostics is not None:
+                diagnostics.record_unmatched(
+                    registry.explain_no_match(metadata, record, idx)
+                )
             continue
-        for ev in chosen.transform(metadata, record):
+        if diagnostics is not None:
+            diagnostics.record_matched()
+        for ev in chosen.transform(metadata, record, collector=diagnostics):
             events.append(ev)
 
     logger.info("adapter produced %d events", len(events))

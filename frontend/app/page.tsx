@@ -239,6 +239,26 @@ export default function Page() {
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
   const bundle = runResult?.bundle ?? null;
   const conceptSlots = runResult?.concept_slots ?? [];
+  const adapterDiagnostics = runResult?.adapter_diagnostics ?? null;
+
+  // YAML text passed down so the DebugPanel can send the *current* config to
+  // /api/suggest-config-fix. Stays in sync with edits in AdapterPanel via the
+  // shared configMap state.
+  const yamlText = useMemo(
+    () => (config ? dumpAdapterYaml(config) : ""),
+    [config],
+  );
+
+  // Apply an LLM-patched YAML back to the editor: parse, replace the current
+  // config entry, and stay on the results tab so the user can re-run.
+  const applyPatchedYaml = (next: string) => {
+    try {
+      const parsed = parseAdapterYaml(next);
+      setConfigMap((m) => ({ ...m, [configKey]: parsed }));
+    } catch (e) {
+      setRunError(`Patched YAML failed to parse: ${(e as Error).message}`);
+    }
+  };
 
   const cleanSummary = useMemo(() => summarizeClean(config), [config]);
   const validateSummary = useMemo(() => summarizeValidate(config), [config]);
@@ -499,6 +519,10 @@ export default function Page() {
             onConceptChange={handleConceptChange}
             onRerunWithConcepts={() => handleRun({ preserveConcepts: true })}
             rerunning={running}
+            adapterDiagnostics={adapterDiagnostics}
+            yamlText={yamlText}
+            inputData={inputData}
+            onApplyYaml={applyPatchedYaml}
           />
         )}
 
