@@ -374,7 +374,7 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
     from langchain_core.tools import tool as _tool_decorator
 
     @_tool_decorator
-    def search_terminology(system: str, query: str) -> str:
+    def search_terminology(systems: str | list[str], query: str) -> str:
         """Search medical terminology databases for standard codes.
 
         Args:
@@ -384,7 +384,7 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
         Returns:
             JSON array of matching concepts with system, code, and display.
         """
-        result = _raw_search_tool.invoke({"system": system, "query": query})
+        result = _raw_search_tool.invoke({"systems": systems, "query": query})
         try:
             items = _json.loads(result)
             if isinstance(items, list):

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -81,8 +82,11 @@ class OmopHubClient:
     stdlib ``urllib`` — one upstream endpoint isn't worth an httpx dep.
     """
 
+    _MIN_REQUEST_INTERVAL = 0.25
+
     def __init__(self, *, timeout: float = 5.0) -> None:
         self._timeout = timeout
+        self._last_request: float = 0.0
 
     @staticmethod
     def _require_key() -> str:
@@ -126,16 +130,29 @@ class OmopHubClient:
             },
         )
 
-        try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                raw = resp.read()
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="replace")[:200] if e.fp else ""
-            logger.warning("omophub fetch failed (%s): %s %s", system, e.code, body)
-            raise TerminologyError(f"omophub upstream {e.code}: {body or e.reason}") from e
-        except urllib.error.URLError as e:
-            logger.warning("omophub fetch failed (%s): %s", system, e)
-            raise TerminologyError(f"upstream fetch failed: {e}") from e
+        elapsed = time.monotonic() - self._last_request
+        if elapsed < self._MIN_REQUEST_INTERVAL:
+            time.sleep(self._MIN_REQUEST_INTERVAL - elapsed)
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    raw = resp.read()
+                self._last_request = time.monotonic()
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < max_retries - 1:
+                    retry_after = float(e.headers.get("Retry-After", 1 + attempt))
+                    logger.warning("omophub rate-limited (%s), retrying in %.1fs", system, retry_after)
+                    time.sleep(retry_after)
+                    continue
+                body = e.read().decode("utf-8", errors="replace")[:200] if e.fp else ""
+                logger.warning("omophub fetch failed (%s): %s %s", system, e.code, body)
+                raise TerminologyError(f"omophub upstream {e.code}: {body or e.reason}") from e
+            except urllib.error.URLError as e:
+                logger.warning("omophub fetch failed (%s): %s", system, e)
+                raise TerminologyError(f"upstream fetch failed: {e}") from e
 
         try:
             data = json.loads(raw)

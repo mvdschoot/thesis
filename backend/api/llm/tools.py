@@ -14,7 +14,7 @@ from api.terminology import TerminologyError, get_client
 
 
 @tool
-def search_terminology(system: str, query: str) -> str:
+def search_terminology(systems: str | list[str], query: str) -> str:
     """Search medical terminology databases for standard codes.
 
     Use this tool to look up FHIR-compatible codes in official vocabularies.
@@ -36,10 +36,14 @@ def search_terminology(system: str, query: str) -> str:
         ``code``, and ``display``.  Empty array if nothing matched.
         Results are ranked by relevance to your query.
     """
-    if system not in ("loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"):
-        return json.dumps({"error": f"Unknown system {system!r}. Use loinc, ucum, snomed, rxnorm, icd10, or cpt."})
+    systems = systems if isinstance(systems, list) else [systems]
+    for system in systems:
+        if system not in ("loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"):
+            return json.dumps({"error": f"Unknown system {system!r}. Use loinc, ucum, snomed, rxnorm, icd10, or cpt."})
     try:
-        results = get_client().search(system, query, max_results=10)  # type: ignore[arg-type]
+        results = []
+        for system in systems:
+            results.extend(get_client().search(system, query, max_results=10))  # type: ignore[arg-type]
         return json.dumps(results)
     except TerminologyError as exc:
         return json.dumps({"error": f"Terminology search failed: {exc}"})

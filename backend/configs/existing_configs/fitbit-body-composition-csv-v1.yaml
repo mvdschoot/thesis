@@ -1,0 +1,111 @@
+adapter:
+  id: "fitbit-body-composition-csv-v1"
+  version: "1.0.0"
+  description: "Fitbit CSV export of daily weight, BMI, and body fat composition records."
+
+match:
+  source: "fitbit"
+  record:
+    - { field: "Id", exists: true }
+    - { field: "Date", exists: true }
+    - { field: "WeightKg", exists: true }
+    - { field: "BMI", exists: true }
+    - { field: "IsManualReport", exists: true }
+    - { field: "LogId", exists: true }
+    - { field: "Date", type: "string" }
+
+defaults:
+  subject_id: { path: "Id" }
+  context:
+    source: "fitbit"
+    modality: "wearable"
+    device: null
+    source_measurement_type: "body composition"
+  stage: "structured"
+  source_record_id:
+    template: "fitbit:{Id}:{Date}"
+
+emit:
+  - id: "weight"
+    description: "Body weight measurement from Fitbit CSV export."
+    type: "measurement"
+    category: "weight"
+    granularity: "instant"
+    timestamp:
+      start: { path: "Date", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
+    payload:
+      value: { path: "WeightKg" }
+      raw_value: { path: "WeightKg" }
+      unit: "kg"
+      label: "Weight"
+    extensions:
+      fitbit.isManualReport: { path: "IsManualReport" }
+      fitbit.logId: { path: "LogId" }
+    quality:
+      flags:
+        - condition: { path: "IsManualReport", equals: true }
+          code: "MANUAL_ENTRY"
+          severity: "info"
+          stage: "structured"
+          message: "Weight was manually entered by the user"
+
+  - id: "bmi"
+    description: "BMI measurement from Fitbit CSV export."
+    type: "measurement"
+    category: "body-mass-index"
+    granularity: "instant"
+    timestamp:
+      start: { path: "Date", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
+    payload:
+      value: { path: "BMI" }
+      raw_value: { path: "BMI" }
+      unit: "kg/m2"
+      label: "BMI"
+    extensions:
+      fitbit.isManualReport: { path: "IsManualReport" }
+      fitbit.logId: { path: "LogId" }
+
+  - id: "body-fat"
+    description: "Body fat percentage when present in the Fitbit CSV export."
+    type: "measurement"
+    category: "body-fat-percentage"
+    granularity: "instant"
+    timestamp:
+      start: { path: "Date", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
+    payload:
+      value: { path: "Fat" }
+      raw_value: { path: "Fat" }
+      unit: "%"
+      label: "Fat"
+    extensions:
+      fitbit.isManualReport: { path: "IsManualReport" }
+      fitbit.logId: { path: "LogId" }
+
+clean:
+  heuristics:
+    - whitespace
+    - { name: timestamp_normalizer, accept_formats: ["%m/%d/%Y %I:%M:%S %p"] }
+    - type_coercer
+    - unit_inferrer
+
+validate:
+  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+  timestamp_window: { min: "2010-01-01", max: "now+1d" }
+  categories:
+    weight:
+      unit_whitelist: ["kg"]
+    body-mass-index:
+      unit_whitelist: ["kg/m2"]
+    body-fat-percentage:
+      unit_whitelist: ["%"]
+
+qualify:
+  enabled: [completeness, duplicates, outliers, conformance, plausibility]
+  outliers: { hampel_k: 3.5, min_group_size: 5 }
+  duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
+  plausibility: { warning_count_for_review: 1 }
+
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include: [Patient, Observation]

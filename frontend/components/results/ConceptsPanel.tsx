@@ -276,7 +276,7 @@ function SlotRow({ slot, coding, noMatch, onChange }: SlotRowProps) {
             />
           ) : (
             <>
-              {noMatch && !coding && (
+              {!effective && (
                 <button
                   className="btn tiny"
                   onClick={() => {

@@ -240,7 +240,13 @@ def _build_observation(
     }
     obs.update(_effective(event))
 
-    # Top-level value (or components, mutually exclusive in FHIR R4).
+    if event.payload.value is not None:
+        obs.update(_value_block(
+            event.payload.value,
+            event.payload.unit,
+            unit_coding=_coding_from_dict(codings.get("unit")),
+        ))
+
     if event.payload.components:
         component_codings = codings.get("component") or {}
         component_unit_codings = codings.get("component_unit") or {}
@@ -259,12 +265,6 @@ def _build_observation(
                 ),
             })
         obs["component"] = comp_list
-    else:
-        obs.update(_value_block(
-            event.payload.value,
-            event.payload.unit,
-            unit_coding=_coding_from_dict(codings.get("unit")),
-        ))
 
     if event.quality.flags:
         obs["note"] = [
