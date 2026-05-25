@@ -33,6 +33,7 @@ Top-level sections:
 - `validate` (optional): which validators run + per-category overlay on top of the global quality_rules.yaml. Omitted → all validators, global rules.
 - `qualify` (optional): which cross-event checks run + tunables (Hampel k, fingerprint fields, plausibility threshold). Omitted → all checks with defaults.
 - `fhir` (optional): toggles + bundle shape for the FHIR R4 output stage. Omitted → FHIR output enabled with sensible defaults (Patient + Observation, transaction bundle).
+- `omop` (optional): toggles + table selection for the OMOP CDM v5.4 output. Omitted → OMOP CDM output enabled with sensible defaults (all tables).
 
 Match-block rigidity (MANDATORY):
 - Do NOT rely on `match.source` alone — that lets the engine try to transform records you can't actually handle. For every config you generate, the `record` list MUST:
@@ -108,6 +109,23 @@ FHIR block (`fhir`):
     - `quality.plausibility="exclude" → status="entered-in-error"`, `"review" → "amended"`, otherwise `"final"`.
     - `payload.value` is mapped to `valueQuantity` (numeric) / `valueBoolean` / `valueString`. `payload.components[]` becomes `Observation.component[]` or `QuestionnaireResponse.item[]`.
     - Subject + Device + Observation references are stable UUID5 derivations of `subject_id`, `(source, device)`, and `event_id` respectively — re-running the pipeline produces identical bundle URIs.
+
+OMOP CDM block (`omop`):
+- `enabled: true | false` — when false, the pipeline returns no OMOP CDM tables. Default: true.
+- `include`: subset of `[person, measurement, observation, device_exposure, observation_period]`. Default: all five tables.
+    - `person` — one row per unique `subject_id`. Demographics are unknown for wearable data (concept_id=0).
+    - `measurement` — numeric health data (heart rate, weight, blood pressure, steps, SpO2, etc.). Routed by domain from the OMOPHub FHIR Resolver.
+    - `observation` — categorical/behavioural data (surveys, game scores, session metadata). Fallback for events whose domain is not Measurement.
+    - `device_exposure` — one row per unique (subject, device) pair.
+    - `observation_period` — one row per subject spanning the earliest-to-latest timestamp of emitted rows.
+- Hardcoded behaviors (NOT user-configurable here):
+    - Table routing is domain-driven: the pipeline batch-resolves FHIR codings via the OMOPHub FHIR Resolver API (`POST /v1/fhir/resolve/batch`). The response's `target_table` determines which CDM table each event goes to. A FHIR Observation with a LOINC lab code routes to `measurement`, not `observation`.
+    - Both `*_concept_id` (OMOP standard concept via "Maps to") and `*_source_concept_id` (original vocabulary concept) are populated.
+    - `*_type_concept_id` is derived from `context.modality`: wearable/sensor/app/game/vr → 32865 (Patient self-report), scale → 705183 (Patient self-tested), survey → 32862 (Patient filled survey), unknown → 32817 (EHR).
+    - Events with `quality.plausibility="exclude"` are skipped entirely.
+    - Unmapped events (concept_id=0) are still emitted — OMOP convention — and tracked in a separate `unmapped` audit list.
+    - `payload.components[]` (e.g. blood pressure systolic/diastolic) become separate rows in the target table.
+- Always include the `omop:` block when you include a `fhir:` block.
 
 Defaults & omission rule:
 - Every block, every nested key, every parameter is optional. Omitted = current default behavior.

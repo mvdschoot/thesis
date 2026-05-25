@@ -12,6 +12,7 @@ dependencies = [
   "langchain-core>=0.3",
   "langchain-anthropic>=0.3",
   "python-multipart>=0.0.12",
+  "omophub>=0.1",
 ]
 
 [project.optional-dependencies]
@@ -35,4 +36,5 @@ packages = [
   "pipeline.qualifier",
   "pipeline.mapper",
   "pipeline.fhir",
+  "pipeline.omop",
 ]

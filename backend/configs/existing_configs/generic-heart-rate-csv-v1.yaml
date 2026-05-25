@@ -65,3 +65,7 @@ fhir:
   enabled: true
   bundle_type: transaction
   include: [Patient, Observation]
+
+omop:
+  enabled: true
+  include: [person, measurement, observation, device_exposure, observation_period]

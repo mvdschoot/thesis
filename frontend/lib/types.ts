@@ -200,6 +200,7 @@ export interface PipelineConfig {
   validate?: Record<string, unknown>;
   qualify?: Record<string, unknown>;
   fhir?: Record<string, unknown>;
+  omop?: Record<string, unknown>;
   // Carry every other top-level YAML key the user (or LLM) included that we
   // don't model explicitly — keeps round-trip lossless.
   extra?: Record<string, unknown>;
@@ -227,6 +228,32 @@ export interface FhirBundle {
   entry: FhirBundleEntry[];
 }
 
+// ─── OMOP CDM output ────────────────────────────────────────────────────────
+
+export interface OmopCdmOutput {
+  person: Record<string, unknown>[];
+  measurement: Record<string, unknown>[];
+  observation: Record<string, unknown>[];
+  device_exposure: Record<string, unknown>[];
+  observation_period: Record<string, unknown>[];
+  unmapped: Record<string, unknown>[];
+  resolution_stats: {
+    total_codings: number;
+    resolved: number;
+    failed: number;
+    mapping_types: Record<string, number>;
+  };
+  stats: {
+    person_count: number;
+    measurement_count: number;
+    observation_count: number;
+    device_exposure_count: number;
+    observation_period_count: number;
+    unmapped_count: number;
+    component_rows: number;
+  };
+}
+
 // ─── Concept mapping (MAPPED stage) ─────────────────────────────────────────
 
 export interface Coding {
@@ -234,6 +261,7 @@ export interface Coding {
   code: string;
   display?: string | null;
   confidence?: "high" | "medium" | "low" | null;
+  concept_id?: number | null;
 }
 
 export type ConceptSlotKind = "code" | "unit" | "component" | "category";

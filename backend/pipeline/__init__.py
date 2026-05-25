@@ -16,7 +16,7 @@ import yaml
 
 from domain.models import CanonicalEvent
 
-from . import adapter, cleaner, connector, fhir, mapper, qualifier, validator
+from . import adapter, cleaner, connector, fhir, mapper, omop, qualifier, validator
 from .adapter.config_adapter import ConfigAdapter
 from .adapter.diagnostics import AdapterDiagnostics, DiagnosticsCollector
 
@@ -69,4 +69,6 @@ def run_pipeline(
     stats.update(mapper_stats)
     standardized, fhir_stats = fhir.run(mapped, config=config_adapter.fhir_block)
     stats.update(fhir_stats)
+    _, omop_stats = omop.run(standardized, config=config_adapter.omop_block)
+    stats.update(omop_stats)
     return standardized, stats, adapter_diagnostics

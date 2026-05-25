@@ -53,6 +53,7 @@ class Coding(BaseModel):
     code: str
     display: str | None = None
     confidence: Literal["high", "medium", "low"] | None = None
+    concept_id: int | None = None
 
 
 class ConceptSlot(BaseModel):
@@ -116,6 +117,7 @@ class TransformResponse(BaseModel):
     events: list[dict[str, Any]]
     stats: dict[str, Any]
     bundle: dict[str, Any] | None = None
+    omop_cdm: dict[str, Any] | None = None
     concept_slots: list[ConceptSlot] = Field(default_factory=list)
     adapter_diagnostics: AdapterDiagnosticsOut | None = None
 
@@ -157,3 +159,4 @@ class TerminologySearchResult(BaseModel):
     system: str
     code: str
     display: str
+    concept_id: int | None = None

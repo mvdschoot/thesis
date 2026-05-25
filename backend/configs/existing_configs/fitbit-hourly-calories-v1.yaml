@@ -1,14 +1,14 @@
 adapter:
-  id: "fitbit-hourly-steps-v1"
+  id: "fitbit-hourly-calories-v1"
   version: "1.0.0"
-  description: "Fitabase Fitbit export (CSV) — hourly step totals."
+  description: "Fitbit hourly calories-burnt export (CSV) — one event per hour from ActivityHour and Calories."
 
 match:
   source: "fitbit"
   record:
     - { field: "Id", exists: true }
     - { field: "ActivityHour", exists: true }
-    - { field: "StepTotal", exists: true }
+    - { field: "Calories", exists: true }
 
 defaults:
   subject_id: { path: "Id" }
@@ -16,25 +16,25 @@ defaults:
     source: "fitbit"
     modality: "wearable"
     device: null
-    source_measurement_type: "hourly steps"
+    source_measurement_type: "hourly calories burned"
   stage: "structured"
   source_record_id:
     template: "fitbit:{Id}:{ActivityHour}"
 
 emit:
-  - id: "hourly-steps"
-    description: "One hourly step-total measurement from the Fitbit CSV export."
+  - id: "hourly-calories"
+    description: "Hourly calories-burnt measurement from Fitbit CSV export."
     type: "measurement"
-    category: "step-count"
+    category: "calories-burned"
     granularity: "interval"
     timestamp:
       start: { path: "ActivityHour", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }
       duration_seconds: 3600
     payload:
-      value: { path: "StepTotal" }
-      raw_value: { path: "StepTotal" }
-      unit: "{count}"
-      label: "StepTotal"
+      value: { path: "Calories" }
+      raw_value: { path: "Calories" }
+      unit: "kcal"
+      label: "Calories"
 
 clean:
   heuristics:
@@ -47,12 +47,14 @@ validate:
   enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
   timestamp_window: { min: "2014-01-01", max: "now+1d" }
   categories:
-    step-count:
-      unit_whitelist: ["{count}"]
+    calories-burned:
+      unit_whitelist: ["kcal"]
       range:
         min: 0
-        max: 100000
-        on_violation: { severity: "warning", code: "STEP_COUNT_OUT_OF_RANGE" }
+        max: 10000
+        on_violation:
+          severity: "warning"
+          code: "CALORIES_OUT_OF_RANGE"
 
 qualify:
   enabled: [completeness, duplicates, outliers, conformance, plausibility]

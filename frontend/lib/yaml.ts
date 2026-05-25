@@ -27,6 +27,7 @@ const KNOWN_TOP_LEVEL_KEYS = new Set([
   "validate",
   "qualify",
   "fhir",
+  "omop",
 ]);
 
 interface DiskPredicate {
@@ -87,6 +88,7 @@ export function parseAdapterYaml(text: string): PipelineConfig {
     validate: raw.validate as Record<string, unknown> | undefined,
     qualify: raw.qualify as Record<string, unknown> | undefined,
     fhir: raw.fhir as Record<string, unknown> | undefined,
+    omop: raw.omop as Record<string, unknown> | undefined,
     extra: Object.keys(extra).length > 0 ? extra : undefined,
   };
 }
@@ -109,6 +111,7 @@ export function dumpAdapterYaml(config: PipelineConfig): string {
   if (config.validate !== undefined) onDisk.validate = config.validate;
   if (config.qualify !== undefined) onDisk.qualify = config.qualify;
   if (config.fhir !== undefined) onDisk.fhir = config.fhir;
+  if (config.omop !== undefined) onDisk.omop = config.omop;
   if (config.extra) {
     for (const [k, v] of Object.entries(config.extra)) {
       onDisk[k] = v;

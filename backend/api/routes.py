@@ -260,6 +260,14 @@ def transform(req: TransformRequest) -> TransformResponse:
         stats["fhir.resource_count"] = fhir_stats.get("resource_count", 0)
         stats["fhir.size_bytes"] = fhir_stats.get("size_bytes", 0)
 
+    omop_raw = stats.pop("omop", None)
+    omop_cdm = omop_raw if isinstance(omop_raw, dict) else None
+    if isinstance(omop_cdm, dict):
+        omop_table_stats = omop_cdm.get("stats", {})
+        stats["omop.measurement_count"] = omop_table_stats.get("measurement_count", 0)
+        stats["omop.observation_count"] = omop_table_stats.get("observation_count", 0)
+        stats["omop.unmapped_count"] = omop_table_stats.get("unmapped_count", 0)
+
     mapper_stats = stats.pop("mapper", None)
     concept_slots = (
         mapper_stats.get("slots", []) if isinstance(mapper_stats, dict) else []
@@ -272,6 +280,7 @@ def transform(req: TransformRequest) -> TransformResponse:
         events=[e.to_dict() for e in events],
         stats=stats,
         bundle=bundle,
+        omop_cdm=omop_cdm,
         concept_slots=concept_slots,
         adapter_diagnostics=AdapterDiagnosticsOut.model_validate(
             adapter_diagnostics.to_dict()

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import type { AdapterDiagnostics, NoMatchSlot } from "@/lib/api";
-import type { CanonicalEvent, Coding, ConceptSlot, FhirBundle } from "@/lib/types";
+import type { CanonicalEvent, Coding, ConceptSlot, FhirBundle, OmopCdmOutput } from "@/lib/types";
 
 import ConceptsPanel from "./ConceptsPanel";
 import DebugPanel from "./DebugPanel";
@@ -12,11 +12,13 @@ import EventDrawer from "./EventDrawer";
 import EventStats from "./EventStats";
 import EventTable from "./EventTable";
 import FhirBundlePanel from "./FhirBundlePanel";
+import OmopCdmPanel from "./OmopCdmPanel";
 
 interface Props {
   events: CanonicalEvent[];
   source: "live" | "simulated";
   bundle: FhirBundle | null;
+  omopCdm: OmopCdmOutput | null;
   conceptSlots: ConceptSlot[];
   conceptMappings: Record<string, Coding>;
   onConceptChange: (key: string, coding: Coding | null) => void;
@@ -31,12 +33,13 @@ interface Props {
   onApplyYaml: (yaml: string) => void;
 }
 
-type View = "events" | "concepts" | "fhir" | "debug";
+type View = "events" | "concepts" | "fhir" | "omop" | "debug";
 
 export default function ResultsPanel({
   events,
   source,
   bundle,
+  omopCdm,
   conceptSlots,
   conceptMappings,
   onConceptChange,
@@ -71,9 +74,13 @@ export default function ResultsPanel({
     return adapterDiagnostics.rules.some((r) => r.events_emitted === 0);
   }, [adapterDiagnostics]);
 
+  const omopRowCount = omopCdm
+    ? (omopCdm.stats?.measurement_count ?? 0) + (omopCdm.stats?.observation_count ?? 0)
+    : 0;
+
   return (
     <div>
-      <div className="section-sub">Output · CanonicalEvent[] + FHIR Bundle</div>
+      <div className="section-sub">Output · CanonicalEvent[] + FHIR Bundle + OMOP CDM</div>
       <h2 className="section-title">Results</h2>
       <p className="muted" style={{ maxWidth: 720, marginTop: 0 }}>
         Stateless per-request output. Failed-validation events are tagged, not dropped — consumers choose their own filter point.
@@ -88,7 +95,7 @@ export default function ResultsPanel({
         )}
       </p>
 
-      <div style={{ display: "flex", gap: 8, margin: "12px 0 6px" }}>
+      <div style={{ display: "flex", gap: 8, margin: "12px 0 6px", flexWrap: "wrap" }}>
         <button
           className={cx("btn", view === "events" && "primary")}
           onClick={() => setView("events")}
@@ -112,6 +119,13 @@ export default function ResultsPanel({
           title="View the FHIR R4 Bundle produced by the pipeline"
         >
           FHIR Bundle{bundle ? ` (${bundle.entry?.length ?? 0})` : ""}
+        </button>
+        <button
+          className={cx("btn", view === "omop" && "primary")}
+          onClick={() => setView("omop")}
+          title="View the OMOP CDM v5.4 tables produced by the pipeline"
+        >
+          OMOP CDM{omopRowCount > 0 ? ` (${omopRowCount})` : ""}
         </button>
         <button
           className={cx("btn", view === "debug" && "primary")}
@@ -181,6 +195,8 @@ export default function ResultsPanel({
       )}
 
       {view === "fhir" && <FhirBundlePanel bundle={bundle} />}
+
+      {view === "omop" && <OmopCdmPanel cdm={omopCdm} />}
 
       {view === "debug" && (
         <DebugPanel

@@ -129,6 +129,7 @@ export interface TransformResponse {
   events: import("./types").CanonicalEvent[];
   stats: TransformStats;
   bundle: import("./types").FhirBundle | null;
+  omop_cdm: import("./types").OmopCdmOutput | null;
   concept_slots: import("./types").ConceptSlot[];
   adapter_diagnostics?: AdapterDiagnostics | null;
 }

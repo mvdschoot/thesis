@@ -73,7 +73,7 @@ class TerminologyError(RuntimeError):
 
 
 class TerminologyClient(Protocol):
-    def search(self, system: TermSystem, query: str, max_results: int = 20) -> list[dict[str, str]]:
+    def search(self, system: TermSystem, query: str, max_results: int = 20) -> list[dict[str, Any]]:
         ...
 
 
@@ -106,7 +106,7 @@ class OmopHubClient:
         system: TermSystem,
         query: str,
         max_results: int = 20,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         vocab = _VOCAB_FILTER.get(system)
         if vocab is None:
             raise TerminologyError(f"Unsupported terminology system: {system}")
@@ -191,8 +191,8 @@ def _extract_results(data: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _parse_response(data: Any) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+def _parse_response(data: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for item in _extract_results(data):
         if not isinstance(item, dict):
             continue
@@ -205,11 +205,15 @@ def _parse_response(data: Any) -> list[dict[str, str]]:
         if concept_class in _EXCLUDED_CONCEPT_CLASSES:
             continue
         system_uri = _FHIR_SYSTEM.get(str(vocab)) or f"urn:omophub:vocab:{vocab}"
-        out.append({
+        entry: dict[str, Any] = {
             "system": system_uri,
             "code": str(code),
             "display": str(name) if name else str(code),
-        })
+        }
+        omop_id = item.get("concept_id")
+        if omop_id is not None:
+            entry["concept_id"] = int(omop_id)
+        out.append(entry)
     return out
 
 

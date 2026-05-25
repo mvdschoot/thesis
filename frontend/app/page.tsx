@@ -239,6 +239,7 @@ export default function Page() {
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
   const bundle = runResult?.bundle ?? null;
+  const omopCdm = runResult?.omop_cdm ?? null;
   const conceptSlots = runResult?.concept_slots ?? [];
   const adapterDiagnostics = runResult?.adapter_diagnostics ?? null;
 
@@ -524,6 +525,7 @@ export default function Page() {
             events={events}
             source={eventSource}
             bundle={bundle}
+            omopCdm={omopCdm}
             conceptSlots={conceptSlots}
             conceptMappings={conceptMappings}
             onConceptChange={handleConceptChange}
