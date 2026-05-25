@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from domain.models import CanonicalEvent, EventType
+from domain.models import CanonicalEvent, Component, EventType
 
 from .config import FhirConfig
-from .refs import device_uuid, observation_uuid, provenance_uuid, subject_uuid
+from .refs import device_uuid, observation_uuid, provenance_uuid, questionnaire_uuid, subject_uuid
 
 
 # Coarse mapping from canonical category → FHIR Observation.category.text.
@@ -152,6 +152,41 @@ def _concept_codings(event: CanonicalEvent) -> dict[str, Any]:
         return {}
     bag = event.extensions.get("_concept_codings")
     return bag if isinstance(bag, dict) else {}
+
+
+def _questionnaire_item_type(value: Any) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "decimal"
+    return "string"
+
+
+def _build_questionnaire(
+    category: str,
+    components: list[Component],
+) -> dict[str, Any]:
+    q_id = questionnaire_uuid(category)
+    items: list[dict[str, Any]] = []
+    seen_link_ids: set[str] = set()
+    for c in components:
+        if c.name in seen_link_ids:
+            continue
+        seen_link_ids.add(c.name)
+        items.append({
+            "linkId": c.name,
+            "text": c.name,
+            "type": _questionnaire_item_type(c.value),
+        })
+    return {
+        "resourceType": "Questionnaire",
+        "id": q_id,
+        "status": "active",
+        "title": category,
+        "item": items,
+    }
 
 
 def _build_patient(subject_id: str) -> dict[str, Any]:
@@ -288,14 +323,16 @@ def _build_observation(
 
 
 def _build_questionnaire_response(
-    event: CanonicalEvent, *, patient_uuid: str
+    event: CanonicalEvent,
+    *,
+    patient_uuid: str,
+    questionnaire_ref: str | None = None,
 ) -> dict[str, Any]:
     """Build a QuestionnaireResponse from a survey event.
 
     Each ``payload.components[]`` entry becomes one ``item[]`` linkId/answer
     pair; if the event has no components, a single item is built from
-    ``payload.value``. Codesystem-bound Questionnaire references are out of
-    scope (MAPPED stage).
+    ``payload.value``.
     """
     qr: dict[str, Any] = {
         "resourceType": "QuestionnaireResponse",
@@ -303,6 +340,8 @@ def _build_questionnaire_response(
         "status": _qr_status_for_event(event),
         "subject": {"reference": f"urn:uuid:{patient_uuid}"},
     }
+    if questionnaire_ref:
+        qr["questionnaire"] = questionnaire_ref
     if event.timestamp:
         qr["authored"] = event.timestamp
 
@@ -458,6 +497,20 @@ def build_bundle(
             device = _build_device(src, dev)
             entries.append(_entry(device["id"], device, bundle_type=config.bundle_type))
 
+    # Questionnaire definitions — one per unique survey category.
+    seen_questionnaires: dict[str, list[Component]] = {}
+    if "Questionnaire" in include:
+        for ev in events:
+            if ev.type == EventType.SURVEY and ev.payload.components:
+                cat = ev.category
+                if cat not in seen_questionnaires:
+                    seen_questionnaires[cat] = []
+                seen_questionnaires[cat].extend(ev.payload.components)
+        for cat, components in seen_questionnaires.items():
+            q = _build_questionnaire(cat, components)
+            q_uuid = questionnaire_uuid(cat)
+            entries.append(_entry(q_uuid, q, bundle_type=config.bundle_type))
+
     # Observations / QuestionnaireResponses — one resource per event.
     if "Observation" in include:
         for ev in events:
@@ -481,7 +534,14 @@ def build_bundle(
                 entries.append(_entry(obs_uuid, obs, bundle_type=config.bundle_type))
                 obs_full_urls.append(f"urn:uuid:{obs_uuid}")
             elif ev.type == EventType.SURVEY:
-                qr = _build_questionnaire_response(ev, patient_uuid=patient_id)
+                q_ref = (
+                    f"urn:uuid:{questionnaire_uuid(ev.category)}"
+                    if ev.category in seen_questionnaires
+                    else None
+                )
+                qr = _build_questionnaire_response(
+                    ev, patient_uuid=patient_id, questionnaire_ref=q_ref,
+                )
                 qr_uuid = observation_uuid(ev.event_id)
                 entries.append(_entry(qr_uuid, qr, bundle_type=config.bundle_type))
                 obs_full_urls.append(f"urn:uuid:{qr_uuid}")

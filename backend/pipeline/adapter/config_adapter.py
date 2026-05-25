@@ -136,19 +136,26 @@ def _parse_timestamp(value: Any, format_str: str) -> Any:
 
 
 def _resolve_value(
-    spec: Any, record: dict[str, Any], item: Any | None = None
+    spec: Any,
+    record: dict[str, Any],
+    item: Any | None = None,
+    *,
+    record_index: int | None = None,
 ) -> Any:
     """Resolve a value specification from the config.
 
     Handles: literal values, {path}, {path, transform}, {path, fallback},
     {multiply}, {template}, {date_from, time_from}.
+    ``@record_index`` resolves to the 0-based row/record number.
     """
     if not isinstance(spec, dict):
         return spec
 
     if "path" in spec:
         path = spec["path"]
-        if path.startswith("@item"):
+        if path == "@record_index":
+            value = record_index if record_index is not None else 0
+        elif path.startswith("@item"):
             if item is None:
                 return spec.get("fallback")
             if path == "@item":
@@ -161,7 +168,7 @@ def _resolve_value(
             value = _resolve_path(record, path)
 
         if value is None and "fallback" in spec:
-            value = _resolve_value(spec["fallback"], record, item)
+            value = _resolve_value(spec["fallback"], record, item, record_index=record_index)
         if "transform" in spec:
             value = _apply_transform(value, spec["transform"])
         if "parse_timestamp" in spec:
@@ -169,8 +176,8 @@ def _resolve_value(
         return value
 
     if "date_from" in spec and "time_from" in spec:
-        date_val = _resolve_value(spec["date_from"], record, item)
-        time_val = _resolve_value(spec["time_from"], record, item)
+        date_val = _resolve_value(spec["date_from"], record, item, record_index=record_index)
+        time_val = _resolve_value(spec["time_from"], record, item, record_index=record_index)
         if date_val and time_val:
             date_part = str(date_val)[:10]
             return f"{date_part}T{time_val}Z"
@@ -179,7 +186,7 @@ def _resolve_value(
     if "multiply" in spec:
         result = 1
         for operand in spec["multiply"]:
-            val = _resolve_value(operand, record, item)
+            val = _resolve_value(operand, record, item, record_index=record_index)
             if val is None:
                 return None
             result *= float(val)
@@ -190,6 +197,8 @@ def _resolve_value(
 
         def replacer(m: re.Match) -> str:
             ref = m.group(1)
+            if ref == "@record_index":
+                return str(record_index if record_index is not None else 0)
             if ref.startswith("@item.") and item is not None:
                 v = _resolve_path(item, ref[len("@item."):])
             else:
@@ -203,7 +212,7 @@ def _resolve_value(
 
     if "lookup" in spec:
         lk = spec["lookup"]
-        key_val = _resolve_value(lk["key"], record, item)
+        key_val = _resolve_value(lk["key"], record, item, record_index=record_index)
         mapping = lk.get("map", {})
         if key_val in mapping:
             return mapping[key_val]
@@ -393,6 +402,7 @@ class ConfigAdapter(BaseAdapter):
         metadata: SourceMetadata,
         record: dict[str, Any],
         *,
+        record_index: int = 0,
         collector: DiagnosticsCollector | None = None,
     ) -> list[CanonicalEvent]:
         group_id = CanonicalEvent.new_id()
@@ -406,6 +416,7 @@ class ConfigAdapter(BaseAdapter):
                 collector.start_rule(rule_id)
             events = self._execute_rule(
                 rule, record, metadata, group_id, ingested_at, rule_events,
+                record_index=record_index,
                 collector=collector,
             )
             if collector is not None:
@@ -424,6 +435,7 @@ class ConfigAdapter(BaseAdapter):
         ingested_at: str,
         rule_events: dict[str, list[CanonicalEvent]],
         *,
+        record_index: int = 0,
         collector: DiagnosticsCollector | None = None,
     ) -> list[CanonicalEvent]:
         events: list[CanonicalEvent] = []
@@ -484,7 +496,8 @@ class ConfigAdapter(BaseAdapter):
             else:
                 for item in items:
                     event = self._build_event(
-                        rule, record, metadata, group_id, ingested_at, parent_id, item
+                        rule, record, metadata, group_id, ingested_at, parent_id, item,
+                        record_index=record_index,
                     )
                     events.append(event)
         elif "iterate_object" in rule:
@@ -526,7 +539,8 @@ class ConfigAdapter(BaseAdapter):
                             "value": source_obj[key],
                         }
                         event = self._build_event(
-                            rule, record, metadata, group_id, ingested_at, parent_id, item
+                            rule, record, metadata, group_id, ingested_at, parent_id, item,
+                            record_index=record_index,
                         )
                         events.append(event)
                     else:
@@ -545,7 +559,8 @@ class ConfigAdapter(BaseAdapter):
                     )
         else:
             event = self._build_event(
-                rule, record, metadata, group_id, ingested_at, parent_id, None
+                rule, record, metadata, group_id, ingested_at, parent_id, None,
+                record_index=record_index,
             )
             events.append(event)
 
@@ -560,27 +575,31 @@ class ConfigAdapter(BaseAdapter):
         ingested_at: str,
         parent_id: str | None,
         item: Any | None,
+        *,
+        record_index: int = 0,
     ) -> CanonicalEvent:
+        ri = record_index
+
         subject_spec = self._defaults.get("subject_id", {})
-        subject_id = _resolve_value(subject_spec, record, item) or ""
+        subject_id = _resolve_value(subject_spec, record, item, record_index=ri) or ""
 
         ts_spec = rule.get("timestamp", {})
-        timestamp = _resolve_value(ts_spec.get("start"), record, item) or ""
-        timestamp_end = _resolve_value(ts_spec.get("end"), record, item)
-        duration = _resolve_value(ts_spec.get("duration_seconds"), record, item)
+        timestamp = _resolve_value(ts_spec.get("start"), record, item, record_index=ri) or ""
+        timestamp_end = _resolve_value(ts_spec.get("end"), record, item, record_index=ri)
+        duration = _resolve_value(ts_spec.get("duration_seconds"), record, item, record_index=ri)
 
         p_spec = rule.get("payload", {})
-        value = _resolve_value(p_spec.get("value"), record, item)
-        raw_value = _resolve_value(p_spec.get("raw_value"), record, item)
-        unit = _resolve_value(p_spec.get("unit"), record, item)
-        label = _resolve_value(p_spec.get("label"), record, item)
+        value = _resolve_value(p_spec.get("value"), record, item, record_index=ri)
+        raw_value = _resolve_value(p_spec.get("raw_value"), record, item, record_index=ri)
+        unit = _resolve_value(p_spec.get("unit"), record, item, record_index=ri)
+        label = _resolve_value(p_spec.get("label"), record, item, record_index=ri)
 
         components = None
         if "components" in p_spec:
             components = []
             for c_spec in p_spec["components"]:
-                c_val = _resolve_value(c_spec.get("value"), record, item)
-                c_unit = _resolve_value(c_spec.get("unit"), record, item) if "unit" in c_spec else None
+                c_val = _resolve_value(c_spec.get("value"), record, item, record_index=ri)
+                c_unit = _resolve_value(c_spec.get("unit"), record, item, record_index=ri) if "unit" in c_spec else None
                 components.append(Component(
                     name=c_spec["name"],
                     value=c_val,
@@ -588,10 +607,10 @@ class ConfigAdapter(BaseAdapter):
                 ))
 
         ctx_defaults = self._defaults.get("context", {})
-        ctx_source = _resolve_value(ctx_defaults.get("source"), record, item) or self._match["source"]
-        ctx_modality_str = _resolve_value(ctx_defaults.get("modality"), record, item) or "unknown"
-        ctx_device = _resolve_value(ctx_defaults.get("device"), record, item) or metadata.device
-        ctx_smt = _resolve_value(ctx_defaults.get("source_measurement_type"), record, item)
+        ctx_source = _resolve_value(ctx_defaults.get("source"), record, item, record_index=ri) or self._match["source"]
+        ctx_modality_str = _resolve_value(ctx_defaults.get("modality"), record, item, record_index=ri) or "unknown"
+        ctx_device = _resolve_value(ctx_defaults.get("device"), record, item, record_index=ri) or metadata.device
+        ctx_smt = _resolve_value(ctx_defaults.get("source_measurement_type"), record, item, record_index=ri)
 
         try:
             ctx_modality = Modality(ctx_modality_str)
@@ -603,11 +622,8 @@ class ConfigAdapter(BaseAdapter):
         if ext_spec:
             extensions = {}
             for key, val_spec in ext_spec.items():
-                extensions[key] = _resolve_value(val_spec, record, item)
+                extensions[key] = _resolve_value(val_spec, record, item, record_index=ri)
 
-        # Per-rule quality overrides — passed through extensions for the
-        # downstream validator/qualifier to consume. Stripped from the
-        # user-facing JSON in CanonicalEvent.to_dict().
         quality_overrides = rule.get("quality_overrides")
         if quality_overrides:
             if extensions is None:
@@ -619,7 +635,7 @@ class ConfigAdapter(BaseAdapter):
         for flag_spec in q_spec.get("flags", []):
             if "condition" in flag_spec:
                 cond = flag_spec["condition"]
-                cond_val = _resolve_value({"path": cond["path"]}, record, item)
+                cond_val = _resolve_value({"path": cond["path"]}, record, item, record_index=ri)
                 if cond_val != cond.get("equals"):
                     continue
             f = flag_spec.get("flag", flag_spec)
@@ -632,17 +648,17 @@ class ConfigAdapter(BaseAdapter):
 
         srid_spec = self._defaults.get("source_record_id")
         if srid_spec is not None:
-            source_record_id = str(_resolve_value(srid_spec, record, item) or "")
+            source_record_id = str(_resolve_value(srid_spec, record, item, record_index=ri) or "")
         else:
             user_id = _resolve_value({"path": "userId"}, record) or ""
             m_type = _resolve_value({"path": "measurementType"}, record) or ""
             m_dt = _resolve_value({"path": "measurementDateTime"}, record) or ""
             source_record_id = f"{ctx_source}:{user_id}:{m_type}:{m_dt}"
 
-        rule_type = _resolve_value(rule["type"], record, item)
-        rule_category = _resolve_value(rule["category"], record, item)
+        rule_type = _resolve_value(rule["type"], record, item, record_index=ri)
+        rule_category = _resolve_value(rule["category"], record, item, record_index=ri)
         rule_granularity = _resolve_value(
-            rule.get("granularity", "unknown"), record, item
+            rule.get("granularity", "unknown"), record, item, record_index=ri
         ) or "unknown"
 
         return CanonicalEvent(

@@ -1,0 +1,384 @@
+adapter:
+  id: student-questionnaire-v1-2
+  version: 1.0.0
+  description: Student questionnaire responses from CSV export; one row per student, one survey event per question answered.
+match:
+  source: student-questionnaire
+  record:
+    - field: Timestamp
+      exists: true
+    - field: 1 .Are  you having consistent low grades?
+      exists: true
+    - field: |
+        2. Lack of engagement in coursework?
+      exists: true
+    - field: 3. Satisfied with your chosen degree?
+      exists: true
+    - field: 4. Are you attentive and punctual to your classes?
+      exists: true
+    - field: 5. Do you have good relation with your teachers?
+      exists: true
+    - field: 6. Do you feel lonely / isolation?
+      exists: true
+    - field: 7. Do you have aggressive behaviour often?
+      exists: true
+    - field: 8. Having Sudden mood swings?
+      exists: true
+    - field: 9. Do you feel difficulty managing emotions?
+      exists: true
+    - field: 10. Do you often have Excessive worries?
+      exists: true
+    - field: 11. Are you optimistic?
+      exists: true
+    - field: 12. Are you?
+      exists: true
+    - field: 13. Do you find it difficult making friends?
+      exists: true
+    - field: 14. Are you being bullied?
+      exists: true
+    - field: 15 . Do u  feel lack of socio support network?
+      exists: true
+    - field: 16. Do u have family instabilty?
+      exists: true
+    - field: 17. Do have any siblings?
+      exists: true
+    - field: 18. Parent low income / unemployment?
+      exists: true
+    - field: 19. Lack of parent involvement in education?
+      exists: true
+    - field: 20. Do u have nutritional deficiencies?
+      exists: true
+    - field: 21. Experienced mental health issues like depression?
+      exists: true
+    - field: 22. Do u have any chronic health conditions?
+      exists: true
+    - field: 23. Ever faced any traumatic events?
+      exists: true
+    - field: 24. Do you experienced family loss or grief?
+      exists: true
+    - field: 25. Exposure to violence or abuse?
+      exists: true
+    - field: 26. Do you have any part time job or income source?
+      exists: true
+    - field: 27. Are you afraid of taking risks?
+      exists: true
+    - field: 28. Do you have OCD?
+      exists: true
+    - field: 29. How is your adaptive capability?
+      exists: true
+    - field: 30. Are you happy with your academic performance?
+      exists: true
+    - field: 31. Do you have friendly relationship with your parents?
+      exists: true
+    - field: 32. Gender
+      exists: true
+    - field: 33. Trouble of sleeping?
+      exists: true
+    - field: "34. Type of community?\r\n"
+      exists: true
+    - field: Timestamp
+      type: string
+defaults:
+  subject_id:
+    template: student:{Timestamp}
+  context:
+    source: student-questionnaire
+    modality: survey
+    device: null
+    source_measurement_type: student questionnaire
+  stage: structured
+  source_record_id:
+    template: student-questionnaire:{Timestamp}
+emit:
+  - id: questionnaire-responses
+    description: Expand each CSV row into one survey event per answered question.
+    type: survey
+    category:
+      lookup:
+        key:
+          path: '@item.question'
+        map:
+          1 .Are  you having consistent low grades?: academic-risk
+          "2. Lack of engagement in coursework?\n": academic-engagement
+          3. Satisfied with your chosen degree?: degree-satisfaction
+          4. Are you attentive and punctual to your classes?: attendance-punctuality
+          5. Do you have good relation with your teachers?: teacher-relationship
+          6. Do you feel lonely / isolation?: social-isolation
+          7. Do you have aggressive behaviour often?: aggressive-behaviour
+          8. Having Sudden mood swings?: mood-swings
+          9. Do you feel difficulty managing emotions?: emotion-regulation
+          10. Do you often have Excessive worries?: excessive-worry
+          11. Are you optimistic?: optimism
+          12. Are you?: personality-type
+          13. Do you find it difficult making friends?: friendship-difficulty
+          14. Are you being bullied?: bullying
+          15 . Do u  feel lack of socio support network?: social-support
+          16. Do u have family instabilty?: family-instability
+          17. Do have any siblings?: siblings
+          18. Parent low income / unemployment?: parent-income
+          19. Lack of parent involvement in education?: parent-involvement
+          20. Do u have nutritional deficiencies?: nutritional-deficiency
+          21. Experienced mental health issues like depression?: mental-health-history
+          22. Do u have any chronic health conditions?: chronic-condition
+          23. Ever faced any traumatic events?: trauma-history
+          24. Do you experienced family loss or grief?: bereavement
+          25. Exposure to violence or abuse?: violence-abuse
+          26. Do you have any part time job or income source?: employment
+          27. Are you afraid of taking risks?: risk-aversion
+          28. Do you have OCD?: ocd
+          29. How is your adaptive capability?: adaptive-capability
+          30. Are you happy with your academic performance?: academic-satisfaction
+          31. Do you have friendly relationship with your parents?: parent-relationship
+          32. Gender: gender
+          33. Trouble of sleeping?: sleep-problem
+          "34. Type of community?\r\n": community-type
+        default: unknown
+    granularity: instant
+    iterate_object:
+      source:
+        path: .
+      entries:
+        - key: 1 .Are  you having consistent low grades?
+          label: 1 .Are  you having consistent low grades?
+        - key: |
+            2. Lack of engagement in coursework?
+          label: |
+            2. Lack of engagement in coursework?
+        - key: 3. Satisfied with your chosen degree?
+          label: 3. Satisfied with your chosen degree?
+        - key: 4. Are you attentive and punctual to your classes?
+          label: 4. Are you attentive and punctual to your classes?
+        - key: 5. Do you have good relation with your teachers?
+          label: 5. Do you have good relation with your teachers?
+        - key: 6. Do you feel lonely / isolation?
+          label: 6. Do you feel lonely / isolation?
+        - key: 7. Do you have aggressive behaviour often?
+          label: 7. Do you have aggressive behaviour often?
+        - key: 8. Having Sudden mood swings?
+          label: 8. Having Sudden mood swings?
+        - key: 9. Do you feel difficulty managing emotions?
+          label: 9. Do you feel difficulty managing emotions?
+        - key: 10. Do you often have Excessive worries?
+          label: 10. Do you often have Excessive worries?
+        - key: 11. Are you optimistic?
+          label: 11. Are you optimistic?
+        - key: 12. Are you?
+          label: 12. Are you?
+        - key: 13. Do you find it difficult making friends?
+          label: 13. Do you find it difficult making friends?
+        - key: 14. Are you being bullied?
+          label: 14. Are you being bullied?
+        - key: 15 . Do u  feel lack of socio support network?
+          label: 15 . Do u  feel lack of socio support network?
+        - key: 16. Do u have family instabilty?
+          label: 16. Do u have family instabilty?
+        - key: 17. Do have any siblings?
+          label: 17. Do have any siblings?
+        - key: 18. Parent low income / unemployment?
+          label: 18. Parent low income / unemployment?
+        - key: 19. Lack of parent involvement in education?
+          label: 19. Lack of parent involvement in education?
+        - key: 20. Do u have nutritional deficiencies?
+          label: 20. Do u have nutritional deficiencies?
+        - key: 21. Experienced mental health issues like depression?
+          label: 21. Experienced mental health issues like depression?
+        - key: 22. Do u have any chronic health conditions?
+          label: 22. Do u have any chronic health conditions?
+        - key: 23. Ever faced any traumatic events?
+          label: 23. Ever faced any traumatic events?
+        - key: 24. Do you experienced family loss or grief?
+          label: 24. Do you experienced family loss or grief?
+        - key: 25. Exposure to violence or abuse?
+          label: 25. Exposure to violence or abuse?
+        - key: 26. Do you have any part time job or income source?
+          label: 26. Do you have any part time job or income source?
+        - key: 27. Are you afraid of taking risks?
+          label: 27. Are you afraid of taking risks?
+        - key: 28. Do you have OCD?
+          label: 28. Do you have OCD?
+        - key: 29. How is your adaptive capability?
+          label: 29. How is your adaptive capability?
+        - key: 30. Are you happy with your academic performance?
+          label: 30. Are you happy with your academic performance?
+        - key: 31. Do you have friendly relationship with your parents?
+          label: 31. Do you have friendly relationship with your parents?
+        - key: 32. Gender
+          label: 32. Gender
+        - key: 33. Trouble of sleeping?
+          label: 33. Trouble of sleeping?
+        - key: "34. Type of community?"
+          label: "34. Type of community?"
+    timestamp:
+      start:
+        path: Timestamp
+        parse_timestamp: '%m/%d/%Y %H:%M:%S'
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: null
+      label:
+        path: '@item.label'
+    extensions:
+      student.question:
+        path: '@item.question'
+    quality:
+      flags:
+        - condition:
+            path: '@item.value'
+            equals: null
+          code: MISSING_RESPONSE
+          severity: warning
+          stage: structured
+          message: Question response is missing
+clean:
+  heuristics:
+    - whitespace
+    - name: timestamp_normalizer
+      accept_formats:
+        - '%m/%d/%Y %H:%M:%S'
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2025-01-01'
+    max: now+1d
+  categories:
+    academic-risk:
+      expected_fields:
+        - payload.value
+    academic-engagement:
+      expected_fields:
+        - payload.value
+    degree-satisfaction:
+      expected_fields:
+        - payload.value
+    attendance-punctuality:
+      expected_fields:
+        - payload.value
+    teacher-relationship:
+      expected_fields:
+        - payload.value
+    social-isolation:
+      expected_fields:
+        - payload.value
+    aggressive-behaviour:
+      expected_fields:
+        - payload.value
+    mood-swings:
+      expected_fields:
+        - payload.value
+    emotion-regulation:
+      expected_fields:
+        - payload.value
+    excessive-worry:
+      expected_fields:
+        - payload.value
+    optimism:
+      expected_fields:
+        - payload.value
+    personality-type:
+      expected_fields:
+        - payload.value
+    friendship-difficulty:
+      expected_fields:
+        - payload.value
+    bullying:
+      expected_fields:
+        - payload.value
+    social-support:
+      expected_fields:
+        - payload.value
+    family-instability:
+      expected_fields:
+        - payload.value
+    siblings:
+      expected_fields:
+        - payload.value
+    parent-income:
+      expected_fields:
+        - payload.value
+    parent-involvement:
+      expected_fields:
+        - payload.value
+    nutritional-deficiency:
+      expected_fields:
+        - payload.value
+    mental-health-history:
+      expected_fields:
+        - payload.value
+    chronic-condition:
+      expected_fields:
+        - payload.value
+    trauma-history:
+      expected_fields:
+        - payload.value
+    bereavement:
+      expected_fields:
+        - payload.value
+    violence-abuse:
+      expected_fields:
+        - payload.value
+    employment:
+      expected_fields:
+        - payload.value
+    risk-aversion:
+      expected_fields:
+        - payload.value
+    ocd:
+      expected_fields:
+        - payload.value
+    adaptive-capability:
+      expected_fields:
+        - payload.value
+    academic-satisfaction:
+      expected_fields:
+        - payload.value
+    parent-relationship:
+      expected_fields:
+        - payload.value
+    gender:
+      expected_fields:
+        - payload.value
+    sleep-problem:
+      expected_fields:
+        - payload.value
+    community-type:
+      expected_fields:
+        - payload.value
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include:
+    - Patient
+    - Questionnaire
+    - Provenance
+omop:
+  enabled: true
+  include:
+    - person
+    - observation
+    - observation_period

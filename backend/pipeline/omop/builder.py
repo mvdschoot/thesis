@@ -37,7 +37,7 @@ _RESOLVABLE_SYSTEMS: frozenset[str] = frozenset({
     "http://www.whocc.no/atc",
 })
 
-_TYPE_CONCEPT: dict[str, int] = {
+_TYPE_CONCEPT_FALLBACK: dict[str, int] = {
     "wearable": 32865,  # Patient self-report
     "scale": 705183,    # Patient self-tested
     "sensor": 32865,    # Patient self-report
@@ -47,6 +47,70 @@ _TYPE_CONCEPT: dict[str, int] = {
     "vr": 32865,        # Patient self-report
     "unknown": 32817,   # EHR
 }
+
+_MODALITY_SEARCH_QUERIES: dict[str, str] = {
+    "wearable": "Patient self-report",
+    "scale": "Patient self-tested",
+    "sensor": "Patient self-report",
+    "app": "Patient self-report",
+    "survey": "Patient filled survey",
+    "game": "Patient self-report",
+    "vr": "Patient self-report",
+    "unknown": "EHR",
+}
+
+
+def _resolve_type_concepts(modalities: set[str]) -> dict[str, int]:
+    """Resolve type concept IDs from OMOPHub via bulk semantic search.
+
+    Falls back to an empty dict on any failure — callers merge with
+    ``_TYPE_CONCEPT_FALLBACK``.
+    """
+    try:
+        from api.terminology import get_client as get_terminology_client
+    except ImportError:
+        return {}
+
+    queries = [m for m in modalities if m in _MODALITY_SEARCH_QUERIES]
+    if not queries:
+        return {}
+
+    seen_queries: dict[str, str] = {}
+    searches: list[dict[str, str]] = []
+    for mod in queries:
+        q = _MODALITY_SEARCH_QUERIES[mod]
+        if q not in seen_queries:
+            seen_queries[q] = mod
+            searches.append({"search_id": mod, "query": q})
+        else:
+            seen_queries[q + f"_{mod}"] = mod
+            searches.append({"search_id": mod, "query": q})
+
+    try:
+        client = get_terminology_client()
+        results = client.bulk_search(
+            searches,
+            defaults={
+                "concept_class_id": "Type Concept",
+                "standard_concept": "S",
+                "threshold": 0.8,
+                "page_size": 1,
+            },
+        )
+    except Exception as exc:
+        logger.warning("omop type concept resolution failed, using fallback: %s", exc)
+        return {}
+
+    resolved: dict[str, int] = {}
+    for mod in queries:
+        hits = results.get(mod, [])
+        if hits and isinstance(hits[0], dict) and hits[0].get("concept_id"):
+            resolved[mod] = int(hits[0]["concept_id"])
+            logger.info(
+                "omop type concept %s → %d (%s)",
+                mod, resolved[mod], hits[0].get("display"),
+            )
+    return resolved
 
 
 def _person_id(subject_id: str) -> int:
@@ -58,8 +122,8 @@ def _extract_date(iso_ts: str) -> str:
     return iso_ts[:10] if iso_ts else ""
 
 
-def _type_concept_id(modality: Modality) -> int:
-    return _TYPE_CONCEPT.get(modality.value, 32817)
+def _type_concept_id(modality: Modality, cache: dict[str, int]) -> int:
+    return cache.get(modality.value, _TYPE_CONCEPT_FALLBACK.get(modality.value, 32817))
 
 
 def _concept_codings(event: CanonicalEvent) -> dict[str, Any]:
@@ -129,6 +193,10 @@ def build_cdm(
     *,
     config: OmopConfig,
 ) -> dict[str, Any]:
+    unique_modalities = {ev.context.modality.value for ev in events}
+    resolved_types = _resolve_type_concepts(unique_modalities)
+    type_cache = {**_TYPE_CONCEPT_FALLBACK, **resolved_types}
+
     all_codings = _collect_unique_codings(events)
     unique_codings = [c for c in all_codings if c["system"] in _RESOLVABLE_SYSTEMS]
     skipped = len(all_codings) - len(unique_codings)
@@ -198,7 +266,7 @@ def build_cdm(
         )
         unit_concept_id = unit_resolution.get("standard_concept", {}).get("concept_id", 0) or 0
 
-        type_cid = _type_concept_id(event.context.modality)
+        type_cid = _type_concept_id(event.context.modality, type_cache)
 
         # Route to CDM table. Events with concept_id=0 are still emitted
         # (OMOP convention: 0 = "No matching concept") — tag, don't drop.

@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.omophub.com/v1"
 SEMANTIC_SEARCH_PATH = "/concepts/semantic-search"
+BULK_SEARCH_PATH = "/search/semantic-bulk"
 
 TermSystem = Literal["loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"]
 
@@ -100,6 +101,80 @@ class OmopHubClient:
                 "and add it to backend/.env or your shell environment."
             )
         return key
+
+    def bulk_search(
+        self,
+        searches: list[dict[str, Any]],
+        *,
+        defaults: dict[str, Any] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Batch semantic search via POST /v1/search/semantic-bulk.
+
+        Each element in *searches* must have ``search_id`` and ``query``;
+        optional per-search overrides include ``vocabulary_ids``,
+        ``threshold``, ``page_size``, ``concept_class_id``,
+        ``standard_concept``, and ``domain_ids``.
+
+        Returns a dict mapping ``search_id`` → list of concept dicts
+        (same ``{system, code, display, concept_id}`` shape as
+        ``search()``).
+        """
+        if not searches:
+            return {}
+
+        api_key = self._require_key()
+        combined: dict[str, list[dict[str, Any]]] = {}
+
+        for i in range(0, len(searches), 25):
+            chunk = searches[i : i + 25]
+            body: dict[str, Any] = {"searches": chunk}
+            if defaults:
+                body["defaults"] = defaults
+
+            payload = json.dumps(body).encode("utf-8")
+            req = urllib.request.Request(
+                f"{BASE_URL}{BULK_SEARCH_PATH}",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+
+            elapsed = time.monotonic() - self._last_request
+            if elapsed < self._MIN_REQUEST_INTERVAL:
+                time.sleep(self._MIN_REQUEST_INTERVAL - elapsed)
+
+            max_retries = 3
+            raw: bytes = b""
+            for attempt in range(max_retries):
+                try:
+                    with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                        raw = resp.read()
+                    self._last_request = time.monotonic()
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 429 and attempt < max_retries - 1:
+                        retry_after = float(e.headers.get("Retry-After", 1 + attempt))
+                        logger.warning("omophub bulk rate-limited, retrying in %.1fs", retry_after)
+                        time.sleep(retry_after)
+                        continue
+                    body_text = e.read().decode("utf-8", errors="replace")[:200] if e.fp else ""
+                    logger.warning("omophub bulk search failed: %s %s", e.code, body_text)
+                    raise TerminologyError(f"omophub bulk upstream {e.code}: {body_text or e.reason}") from e
+                except urllib.error.URLError as e:
+                    logger.warning("omophub bulk search failed: %s", e)
+                    raise TerminologyError(f"upstream bulk fetch failed: {e}") from e
+
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise TerminologyError(f"upstream returned invalid JSON: {e}") from e
+
+            combined.update(_parse_bulk_response(data))
+
+        return combined
 
     def search(
         self,
@@ -214,6 +289,60 @@ def _parse_response(data: Any) -> list[dict[str, Any]]:
         if omop_id is not None:
             entry["concept_id"] = int(omop_id)
         out.append(entry)
+    return out
+
+
+def _parse_bulk_response(data: Any) -> dict[str, list[dict[str, Any]]]:
+    """Parse the ``POST /v1/search/semantic-bulk`` response envelope.
+
+    Returns a dict mapping ``search_id`` → list of concept dicts.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    results_wrapper = data if isinstance(data, dict) else {}
+    data_obj = results_wrapper.get("data", results_wrapper)
+    if not isinstance(data_obj, dict):
+        return out
+    entries = data_obj.get("results", [])
+    if not isinstance(entries, list):
+        return out
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        search_id = entry.get("search_id", "")
+        if not search_id:
+            continue
+        if entry.get("status") != "completed":
+            out[search_id] = []
+            continue
+
+        concepts: list[dict[str, Any]] = []
+        for item in entry.get("results", []):
+            if not isinstance(item, dict):
+                continue
+            code = item.get("concept_code")
+            name = item.get("concept_name")
+            vocab = item.get("vocabulary_id")
+            if not code or not vocab:
+                continue
+            concept_class = str(item.get("concept_class_id", ""))
+            if concept_class in _EXCLUDED_CONCEPT_CLASSES:
+                continue
+            system_uri = _FHIR_SYSTEM.get(str(vocab)) or f"urn:omophub:vocab:{vocab}"
+            concept: dict[str, Any] = {
+                "system": system_uri,
+                "code": str(code),
+                "display": str(name) if name else str(code),
+            }
+            omop_id = item.get("concept_id")
+            if omop_id is not None:
+                concept["concept_id"] = int(omop_id)
+            score = item.get("similarity_score")
+            if score is not None:
+                concept["similarity_score"] = float(score)
+            concepts.append(concept)
+        out[search_id] = concepts
+
     return out
 
 

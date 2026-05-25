@@ -46,10 +46,13 @@ class BaseAdapter(ABC):
         metadata: SourceMetadata,
         record: dict[str, Any],
         *,
+        record_index: int = 0,
         collector: "DiagnosticsCollector | None" = None,
     ) -> list[CanonicalEvent]:
         """Transform a single source record into one or more canonical events.
 
+        `record_index` is the 0-based position of this record in the input
+        batch — exposed to YAML configs via ``@record_index``.
         `collector` is optional — subclasses may ignore it. When passed, it
         records per-rule and per-record skip reasons for diagnostics.
         """

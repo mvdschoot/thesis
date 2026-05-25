@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 BUNDLE_TYPES: tuple[str, ...] = ("transaction", "collection")
-RESOURCE_KINDS: tuple[str, ...] = ("Patient", "Observation", "Device", "Provenance")
-DEFAULT_INCLUDE: tuple[str, ...] = ("Patient", "Observation")
+RESOURCE_KINDS: tuple[str, ...] = ("Patient", "Observation", "Device", "Provenance", "Questionnaire")
+DEFAULT_INCLUDE: tuple[str, ...] = ("Patient", "Observation", "Questionnaire")
 
 
 @dataclass

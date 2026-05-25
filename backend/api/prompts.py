@@ -45,7 +45,7 @@ Match-block rigidity (MANDATORY):
 
 Value-spec forms (use anywhere a value is needed):
 - literal: `"foo"`, `42`, `null`
-- path: `{ path: "some.nested.key" }` — dot notation, supports `[0]` indexing. Prefix `@item.` inside an iterated rule to reference the current iteration element.
+- path: `{ path: "some.nested.key" }` — dot notation, supports `[0]` indexing. Prefix `@item.` inside an iterated rule to reference the current iteration element. Use `{ path: "@record_index" }` to get the 0-based row/record number — useful as a stable subject_id when records have no explicit person identifier (e.g. `{ template: "respondent:{@record_index}" }`).
 - transform: `{ path: "...", transform: "start_of_day" | "end_of_day" | "iso_date" | "iso_millis" | "to_int" | "to_float" }`
 - fallback: `{ path: "...", fallback: <another-spec> }` — the fallback is itself a full value-spec (recursive).
 - template: `{ template: "literal {path.to.field} more {@item.foo}" }` — brace-interpolation.
@@ -69,6 +69,11 @@ Rule structure:
 - iterate_object: `{ source, entries: [{ key, label }, ...] }` — expand an object with fixed keys.
 - timestamp: { start: <spec>, end?: <spec>, duration_seconds?: <spec> }.
 - payload: { value, raw_value, unit, label, components: [{name, value, unit?}, ...] }.
+- Value vs. components separation (MANDATORY):
+    - `payload.value` holds a SINGLE scalar measurement (e.g., heart rate = 72).
+    - `payload.components[]` holds MULTIPLE distinct sub-measurements of a composite concept (e.g., blood pressure systolic + diastolic, or heart-rate zone with min/max/minutes/calories).
+    - NEVER duplicate the same data in both places. If the concept has one numeric value, use `payload.value` and omit components. If the concept is composite, use components only and set `payload.value` to null (or to a meaningful aggregate like "total minutes" when one exists).
+    - Anti-pattern: do NOT create a component whose value path equals `payload.value`'s path — this produces duplicate data in the canonical event and in the FHIR Observation (value[x] + component[] with the same value).
 - extensions: free-form `{ key: <spec> }` map; keys prefixed with the source name (e.g. "withings.attrib").
 - parent: another rule's `id` — produced events are linked via `parent_event_id`.
 - quality: { flags: [...] }. Each flag is either an unconditional `{ code, severity, stage, message }` or a conditional `{ condition: { path, equals }, code, severity, stage, message }`.
@@ -102,7 +107,7 @@ Qualifier block (`qualify`):
 FHIR block (`fhir`):
 - `enabled: true | false` — when false, the pipeline returns no bundle. Default: true.
 - `bundle_type: transaction | collection` — `transaction` adds `entry.request.method/url` and is suitable for POST-ing to a FHIR server. `collection` omits the request slice. Default: `transaction`.
-- `include`: subset of `[Patient, Observation, Device, Provenance]`. Default: `[Patient, Observation]`. Add `Device` when `context.device` is meaningful in the sample, and `Provenance` when the user explicitly wants an audit trail attached to the bundle.
+- `include`: subset of `[Patient, Observation, Device, Provenance, Questionnaire]`. Default: `[Patient, Observation, Questionnaire]`. Add `Device` when `context.device` is meaningful in the sample, and `Provenance` when the user explicitly wants an audit trail attached to the bundle. `Questionnaire` emits one definition resource per unique survey category — each `QuestionnaireResponse` links back to it.
 - Hardcoded behaviors (NOT user-configurable here):
     - Every CodeableConcept is text-only. Codesystem binding (LOINC / SNOMED / UCUM) is the future MAPPED stage's responsibility, not this stage's.
     - `event.type=measurement|observation|event|session|summary` → `Observation`. `event.type=survey` → `QuestionnaireResponse`.

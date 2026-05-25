@@ -65,7 +65,7 @@ def run(
             continue
         if diagnostics is not None:
             diagnostics.record_matched()
-        for ev in chosen.transform(metadata, record, collector=diagnostics):
+        for ev in chosen.transform(metadata, record, record_index=idx, collector=diagnostics):
             events.append(ev)
 
     logger.info("adapter produced %d events", len(events))

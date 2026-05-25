@@ -82,7 +82,8 @@ FHIR R4 models clinical facts as **resources** connected by **references**. The 
 |---|---|
 | **Patient** | The person being measured. In Harmonia, a synthesized stub with `identifier` only (no PII). |
 | **Observation** | The primary clinical resource. Covers measurements (heart rate, weight, steps) and general observations. Supports `component[]` for multi-axis data (e.g. blood pressure systolic + diastolic). |
-| **QuestionnaireResponse** | Survey data. Each `payload.component` becomes an `item[]` with `linkId` and `answer[]`. |
+| **Questionnaire** | Survey definition. One per unique survey `category`, listing the questions (`item[]` with `linkId`, `text`, `type`). Linked from `QuestionnaireResponse.questionnaire`. |
+| **QuestionnaireResponse** | Survey data. Each `payload.component` becomes an `item[]` with `linkId` and `answer[]`. References a `Questionnaire` via `questionnaire`. |
 | **Device** | The measurement device (e.g. "Fitbit Charge 6"). Linked from `Observation.device`. |
 | **Provenance** | Audit trail — which adapter, at what time, produced which observations. |
 
@@ -150,6 +151,7 @@ All intra-bundle references use **UUID5** identifiers derived from deterministic
 - `subject_uuid(subject_id)` — Patient
 - `device_uuid(source, device)` — Device
 - `observation_uuid(event_id)` — Observation / QuestionnaireResponse
+- `questionnaire_uuid(category)` — Questionnaire (one per survey category)
 - `provenance_uuid(adapter_id|version|timestamp)` — Provenance
 
 This guarantees:
@@ -175,8 +177,10 @@ Enabled/disabled via the `fhir:` block in the YAML adapter config:
 fhir:
   enabled: true
   bundle_type: transaction          # or "collection"
-  include: [Patient, Observation]   # subset of [Patient, Observation, Device, Provenance]
+  include: [Patient, Observation, Questionnaire]  # subset of [Patient, Observation, Device, Provenance, Questionnaire]
 ```
+
+When `Questionnaire` is in the `include` list, the builder collects all survey events, groups them by category, and emits one `Questionnaire` definition per unique category. Each `QuestionnaireResponse` is linked to its definition via the `questionnaire` field. The Questionnaire's `item[]` is inferred from the `payload.components[]` of the first event with that category — each component name becomes a `linkId`, and the item type is inferred from the value (`integer`, `decimal`, `boolean`, or `string`).
 
 When enabled, `run()` builds the bundle, stamps `stage=STANDARDIZED` on every event, and returns stats including the serialized bundle, resource count, byte size, and any dangling references.
 
@@ -246,9 +250,9 @@ This is a significant structural difference from FHIR, where components are nest
 
 **Type concept ID:**
 
-The `*_type_concept_id` column records *how* the data was captured:
+The `*_type_concept_id` column records *how* the data was captured. These are resolved dynamically via OMOPHub's bulk semantic search endpoint (`POST /v1/search/semantic-bulk`), filtering by `concept_class_id: "Type Concept"`. Hardcoded fallback values are used when OMOPHub is unavailable:
 
-| Canonical modality | OMOP type_concept_id | Meaning |
+| Canonical modality | Fallback type_concept_id | Meaning |
 |---|---|---|
 | `wearable`, `sensor`, `app`, `game`, `vr` | 32865 | Patient self-report |
 | `scale` | 705183 | Patient self-tested |
@@ -301,7 +305,7 @@ The builder returns a dict keyed by table name, each value being a list of row d
 | **Identity** | UUID-based resource IDs with `urn:uuid:` references | Integer IDs (`person_id`, `measurement_id`, ...) |
 | **Terminology** | CodeableConcept with `text` + optional `coding[]` | Mandatory `concept_id` from OHDSI vocabulary (0 = unmapped) |
 | **Components** | Nested within `Observation.component[]` | Flattened to separate `measurement` rows |
-| **Surveys** | `QuestionnaireResponse` resource with `item[]` / `answer[]` | Rows in the `observation` table |
+| **Surveys** | `Questionnaire` (definition) + `QuestionnaireResponse` (answers) with `item[]` / `answer[]` | Rows in the `observation` table |
 | **Excluded events** | Emitted with `status=entered-in-error` | Skipped entirely |
 | **Quality flags** | Preserved as `Observation.note[]` | Not projected |
 | **Device info** | `Device` resource with reference from Observation | `device_exposure` table (separate from clinical tables) |

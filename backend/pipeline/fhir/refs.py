@@ -30,3 +30,7 @@ def observation_uuid(event_id: str) -> str:
 
 def provenance_uuid(group_id: str) -> str:
     return str(uuid.uuid5(_NS, f"provenance:{group_id}"))
+
+
+def questionnaire_uuid(category: str) -> str:
+    return str(uuid.uuid5(_NS, f"questionnaire:{category}"))
