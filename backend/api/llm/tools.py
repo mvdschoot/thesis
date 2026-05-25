@@ -21,20 +21,25 @@ def search_terminology(system: str, query: str) -> str:
 
     Args:
         system: The terminology to search. One of:
-            - "loinc"  — observation codes (heart rate, blood pressure, BMI, …)
+            - "loinc"  — observation/measurement codes (heart rate, blood pressure, BMI, …)
             - "ucum"   — measurement units (bpm, kg, mmHg, mg/dL, …)
             - "snomed" — clinical concepts (fallback when LOINC has no match)
-        query: Natural-language search terms, e.g. "heart rate", "body mass index",
-               "beats per minute". Keep queries short and specific.
+            - "rxnorm" — medication codes
+            - "icd10"  — diagnosis codes (ICD-10-CM)
+            - "cpt"    — procedure codes (CPT-4)
+        query: Search terms. You can search by:
+            - Natural language: "heart rate", "body mass index", "beats per minute"
+            - Code number: "8867-4" to look up a specific code you know
 
     Returns:
-        JSON array of up to 5 matching concepts, each with ``system`` (URI),
+        JSON array of up to 10 matching concepts, each with ``system`` (URI),
         ``code``, and ``display``.  Empty array if nothing matched.
+        Results are ranked by relevance to your query.
     """
-    if system not in ("loinc", "ucum", "snomed"):
-        return json.dumps({"error": f"Unknown system {system!r}. Use loinc, ucum, or snomed."})
+    if system not in ("loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"):
+        return json.dumps({"error": f"Unknown system {system!r}. Use loinc, ucum, snomed, rxnorm, icd10, or cpt."})
     try:
-        results = get_client().search(system, query, max_results=5)  # type: ignore[arg-type]
+        results = get_client().search(system, query, max_results=10)  # type: ignore[arg-type]
         return json.dumps(results)
     except TerminologyError as exc:
         return json.dumps({"error": f"Terminology search failed: {exc}"})

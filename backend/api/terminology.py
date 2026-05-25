@@ -25,14 +25,27 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.omophub.com/v1"
 SEARCH_PATH = "/search/concepts"
 
-TermSystem = Literal["loinc", "ucum", "snomed"]
+TermSystem = Literal["loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"]
 
 # Frontend-facing system name → OMOPHub vocabulary_id filter.
 _VOCAB_FILTER: dict[str, str] = {
     "loinc": "LOINC",
     "ucum": "UCUM",
     "snomed": "SNOMED",
+    "rxnorm": "RxNorm",
+    "icd10": "ICD10CM",
+    "cpt": "CPT4",
 }
+
+_EXCLUDED_CONCEPT_CLASSES: frozenset[str] = frozenset({
+    "LOINC Hierarchy",
+    "LOINC Component",
+    "LOINC System",
+    "LOINC Method",
+    "LOINC Property",
+    "LOINC Time Aspect",
+    "LOINC Scale",
+})
 
 # OMOPHub vocabulary_id → FHIR system URI. We only map systems we actively
 # surface; unknown vocabularies fall back to ``urn:oid:omophub:<vocab>`` so the
@@ -94,12 +107,15 @@ class OmopHubClient:
         q = (query or "").strip()
         if not q:
             return []
+        if len(q) < 3:
+            q = q + " "  # OmopHub requires >= 3 chars
 
         max_n = max(1, min(int(max_results or 20), 50))
+        fetch_n = min(max_n * 4, 50)
         params = {
             "query": q,
             "vocabulary_ids": vocab,
-            "page_size": str(max_n),
+            "page_size": str(fetch_n),
         }
         url = f"{BASE_URL}{SEARCH_PATH}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(
@@ -126,7 +142,9 @@ class OmopHubClient:
         except json.JSONDecodeError as e:
             raise TerminologyError(f"upstream returned invalid JSON: {e}") from e
 
-        return _parse_response(data)
+        results = _parse_response(data)
+        results = _filter_and_rank(results, q)
+        return results[:max_n]
 
 
 def _extract_results(data: Any) -> list[dict[str, Any]]:
@@ -164,6 +182,9 @@ def _parse_response(data: Any) -> list[dict[str, str]]:
         vocab = item.get("vocabulary_id")
         if not code or not vocab:
             continue
+        concept_class = str(item.get("concept_class_id", ""))
+        if concept_class in _EXCLUDED_CONCEPT_CLASSES:
+            continue
         system_uri = _FHIR_SYSTEM.get(str(vocab)) or f"urn:omophub:vocab:{vocab}"
         out.append({
             "system": system_uri,
@@ -171,6 +192,37 @@ def _parse_response(data: Any) -> list[dict[str, str]]:
             "display": str(name) if name else str(code),
         })
     return out
+
+
+def _name_match_score(display: str, query: str) -> float:
+    """Score how well a concept display name matches the search query.
+
+    Higher is better.  Exact match → 1.0.  No overlap → 0.0.
+    """
+    d = display.lower()
+    q = query.lower()
+    if d == q:
+        return 1.0
+    if d.startswith(q + " ") or d.startswith(q + ","):
+        return 0.9
+    q_words = set(q.split())
+    d_words = set(d.split())
+    if q_words and q_words <= d_words:
+        return 0.8 - 0.01 * len(d_words - q_words)
+    if not q_words:
+        return 0.0
+    overlap = len(q_words & d_words)
+    return 0.5 * (overlap / len(q_words))
+
+
+def _filter_and_rank(
+    results: list[dict[str, str]],
+    query: str,
+) -> list[dict[str, str]]:
+    """Re-rank results by name similarity to the query."""
+    scored = [(r, _name_match_score(r.get("display", ""), query)) for r in results]
+    scored.sort(key=lambda x: -x[1])
+    return [r for r, _s in scored]
 
 
 _singleton: OmopHubClient | None = None

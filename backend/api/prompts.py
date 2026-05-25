@@ -264,10 +264,19 @@ def build_concept_suggest_system_prompt() -> str:
         "CRITICAL RULE: You MUST NEVER invent, guess, or recall codes from memory. "
         "Every code you return MUST be copied verbatim (system, code, and display) from "
         "a `search_terminology` tool result. Do NOT fabricate codes.\n\n"
+        "Search tips:\n"
+        # "- You can search by code number to validate a code you know, e.g. search "
+        # 'for "8867-4" to confirm the LOINC code for heart rate.\n'
+        # "- If a text search returns poor results, try searching by the specific code "
+        # "number instead.\n"
+        "- Use the slot's `category` field to judge relevance. For wearable/vital-signs "
+        "data, reject neonatal codes (Apgar, Ballard) and procedure codes.\n"
+        "- When multiple results match, prefer the one whose display name most closely "
+        "matches the slot label.\n\n"
         "Strategy:\n"
-        "1. Read the slot list.\n"
+        "1. Read the slot list, noting each slot's category for context.\n"
         "2. Call `search_terminology` for each slot. Try multiple search queries if the "
-        "first returns poor results (synonyms, abbreviations, broader/narrower terms).\n"
+        "first returns poor results (synonyms, code numbers, broader/narrower terms).\n"
         "3. From the tool results, ALWAYS pick the single best match per slot — even if "
         "the match is imperfect. Copy the `system`, `code`, and `display` fields exactly "
         "as returned by the tool. Use the confidence level to indicate match quality.\n"
@@ -291,9 +300,21 @@ def build_concept_suggest_system_prompt() -> str:
     )
 
 
+def _extract_category(slot: dict[str, Any]) -> str:
+    """Extract the category segment from a slot key like 'code|heart-rate|Heart Rate'."""
+    key = slot.get("key", "")
+    parts = key.split("|")
+    if len(parts) >= 2:
+        return parts[1]
+    return ""
+
+
 def build_concept_suggest_user_prompt(slots: list[dict[str, Any]]) -> str:
-    lines = ["Map the following concept slots to standard terminology codes. You should also try synonyms, abbreviations, abbr. expansions and the like. Concept slots:\n"]
+    lines = ["Map the following concept slots to standard terminology codes. "
+             "Try synonyms, abbreviations, and code numbers where helpful."
+             "Always try the 'label' as search query first.\n"]
     for i, s in enumerate(slots, 1):
+        category = _extract_category(s)
         sample_parts = []
         if s.get("sample"):
             sv = s["sample"]
@@ -302,9 +323,10 @@ def build_concept_suggest_user_prompt(slots: list[dict[str, Any]]) -> str:
             if sv.get("unit"):
                 sample_parts.append(f"unit={sv['unit']}")
         sample_str = f", sample: {{{', '.join(sample_parts)}}}" if sample_parts else ""
+        cat_str = f', category="{category}"' if category else ""
         lines.append(
-            f'{i}. key="{s["key"]}", kind={s["kind"]}, label="{s["label"]}", '
-            f'count={s["count"]}{sample_str}'
+            f'{i}. key="{s["key"]}", kind={s["kind"]}, label="{s["label"]}"'
+            f'{cat_str}, count={s["count"]}{sample_str}'
         )
     return "\n".join(lines)
 

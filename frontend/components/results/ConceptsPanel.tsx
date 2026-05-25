@@ -53,7 +53,8 @@ function defaultSystemForSlot(slot: ConceptSlot): TerminologySystem | null {
 // Which vocabularies a slot's search box can switch between.
 function vocabOptionsForSlot(slot: ConceptSlot): TerminologySystem[] {
   if (slot.kind === "unit") return ["ucum"];
-  if (slot.kind === "code" || slot.kind === "component") return ["loinc", "snomed"];
+  if (slot.kind === "code" || slot.kind === "component")
+    return ["loinc", "snomed", "rxnorm", "icd10", "cpt"];
   return [];
 }
 
@@ -61,6 +62,9 @@ const SYSTEM_LABEL: Record<TerminologySystem, string> = {
   loinc: "LOINC",
   ucum: "UCUM",
   snomed: "SNOMED CT",
+  rxnorm: "RxNorm",
+  icd10: "ICD-10",
+  cpt: "CPT-4",
 };
 
 function formatSample(slot: ConceptSlot): string {

@@ -144,7 +144,7 @@ export interface SuggestFixResponse {
   yaml: string;
 }
 
-export type TerminologySystem = "loinc" | "ucum" | "snomed";
+export type TerminologySystem = "loinc" | "ucum" | "snomed" | "rxnorm" | "icd10" | "cpt";
 
 export function generateConfig(req: GenerateConfigRequest) {
   return post<GenerateConfigResponse>("/api/generate-config", req);

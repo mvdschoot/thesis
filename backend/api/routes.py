@@ -331,15 +331,15 @@ def suggest_config_fix(req: SuggestFixRequest) -> SuggestFixResponse:
 
 @router.get("/terminology/search", response_model=list[TerminologySearchResult])
 def terminology_search(
-    system: str = Query(..., description="loinc | ucum | snomed"),
+    system: str = Query(..., description="loinc | ucum | snomed | rxnorm | icd10 | cpt"),
     q: str = Query("", description="search terms"),
     max: int = Query(20, ge=1, le=50, description="max results to return"),
 ) -> list[TerminologySearchResult]:
     sys_norm = (system or "").strip().lower()
-    if sys_norm not in ("loinc", "ucum", "snomed"):
+    if sys_norm not in ("loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"):
         raise HTTPException(
             status_code=400,
-            detail=f"unsupported system={system!r}; expected one of: loinc, ucum, snomed",
+            detail=f"unsupported system={system!r}; expected one of: loinc, ucum, snomed, rxnorm, icd10, cpt",
         )
     if not q.strip():
         return []
@@ -378,8 +378,8 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
         """Search medical terminology databases for standard codes.
 
         Args:
-            system: The terminology to search. One of "loinc", "ucum", "snomed".
-            query: Natural-language search terms.
+            system: "loinc", "ucum", "snomed", "rxnorm", "icd10", or "cpt".
+            query: Natural-language search terms, or a code number to validate.
 
         Returns:
             JSON array of matching concepts with system, code, and display.
@@ -420,6 +420,8 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
 
     if not isinstance(parsed, dict):
         return SuggestConceptsResponse(errors=["LLM returned non-object response."])
+
+    print("LLM suggestiuons:", parsed)
 
     if "suggestions" in parsed and isinstance(parsed["suggestions"], dict):
         raw_suggestions = parsed["suggestions"]
