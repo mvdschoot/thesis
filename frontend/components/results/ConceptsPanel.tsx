@@ -185,7 +185,7 @@ export default function ConceptsPanel({
           Pick one concept per slot — all events sharing a slot get the same{" "}
           <span className="mono">coding[]</span> in the FHIR bundle. Wearable data is
           repetitive, so a single LOINC code covers most events. Free-search slots
-          query OMOPHub (LOINC / UCUM / SNOMED CT); category uses the fixed FHIR value set.
+          use OMOPHub semantic search (LOINC / UCUM / SNOMED CT); category uses the fixed FHIR value set.
         </p>
         {suggestError && (
           <div
@@ -451,7 +451,7 @@ function SearchBox({
                 key={v}
                 className={cx("btn tiny", system === v && "primary")}
                 onClick={() => setSystem(v)}
-                title={`Search ${SYSTEM_LABEL[v]} via OMOPHub`}
+                title={`Semantic search ${SYSTEM_LABEL[v]} via OMOPHub`}
               >
                 {SYSTEM_LABEL[v]}
               </button>
@@ -461,14 +461,14 @@ function SearchBox({
         <input
           className="input"
           autoFocus
-          placeholder={`Search ${SYSTEM_LABEL[system]}…`}
+          placeholder={`Semantic search ${SYSTEM_LABEL[system]}…`}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           style={{ flex: 1, fontSize: 13 }}
         />
       </div>
       <div style={{ marginTop: 4, maxHeight: 240, overflow: "auto" }}>
-        {loading && <div className="muted" style={{ fontSize: 12 }}>Searching…</div>}
+        {loading && <div className="muted" style={{ fontSize: 12 }}>Semantic searching…</div>}
         {error && (
           <div className="qflag err">
             <div className="qf-bar" />

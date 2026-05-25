@@ -1,10 +1,13 @@
-"""Terminology search client backed by OMOPHub.
+"""Terminology search client backed by OMOPHub semantic search.
 
 OMOPHub (https://omophub.com) is a hosted OHDSI/ATHENA vocabulary search API.
-One endpoint queries 100+ vocabularies — LOINC, SNOMED CT, UCUM, RxNorm, etc.
-— and returns concepts in the OMOP shape (``concept_code``, ``concept_name``,
-``vocabulary_id``). We map ``vocabulary_id`` → FHIR system URI and expose a
-flat ``[{system, code, display}]`` shape so the frontend doesn't need to know
+The semantic search endpoint (``/v1/concepts/semantic-search``) uses
+LLM-generated embeddings to find concepts by natural language — e.g.
+"heart attack" → "Myocardial infarction". Results come pre-ranked by cosine
+similarity so no client-side re-ranking is needed.
+
+We map ``vocabulary_id`` → FHIR system URI and expose a flat
+``[{system, code, display}]`` shape so the frontend doesn't need to know
 about OMOP.
 
 Auth: bearer token from the ``OMOPHUB_API_KEY`` env var.
@@ -24,7 +27,7 @@ from typing import Any, Literal, Protocol
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.omophub.com/v1"
-SEARCH_PATH = "/search/concepts"
+SEMANTIC_SEARCH_PATH = "/concepts/semantic-search"
 
 TermSystem = Literal["loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"]
 
@@ -82,7 +85,7 @@ class OmopHubClient:
     stdlib ``urllib`` — one upstream endpoint isn't worth an httpx dep.
     """
 
-    _MIN_REQUEST_INTERVAL = 0.25
+    _MIN_REQUEST_INTERVAL = 0.5
 
     def __init__(self, *, timeout: float = 5.0) -> None:
         self._timeout = timeout
@@ -114,14 +117,14 @@ class OmopHubClient:
         if len(q) < 3:
             q = q + " "  # OmopHub requires >= 3 chars
 
-        max_n = max(1, min(int(max_results or 20), 50))
-        fetch_n = min(max_n * 4, 50)
+        max_n = max(1, min(int(max_results or 20), 100))
         params = {
             "query": q,
             "vocabulary_ids": vocab,
-            "page_size": str(fetch_n),
+            "page_size": str(max_n),
+            "threshold": "0.3",
         }
-        url = f"{BASE_URL}{SEARCH_PATH}?{urllib.parse.urlencode(params)}"
+        url = f"{BASE_URL}{SEMANTIC_SEARCH_PATH}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(
             url,
             headers={
@@ -160,7 +163,6 @@ class OmopHubClient:
             raise TerminologyError(f"upstream returned invalid JSON: {e}") from e
 
         results = _parse_response(data)
-        results = _filter_and_rank(results, q)
         return results[:max_n]
 
 
@@ -209,37 +211,6 @@ def _parse_response(data: Any) -> list[dict[str, str]]:
             "display": str(name) if name else str(code),
         })
     return out
-
-
-def _name_match_score(display: str, query: str) -> float:
-    """Score how well a concept display name matches the search query.
-
-    Higher is better.  Exact match → 1.0.  No overlap → 0.0.
-    """
-    d = display.lower()
-    q = query.lower()
-    if d == q:
-        return 1.0
-    if d.startswith(q + " ") or d.startswith(q + ","):
-        return 0.9
-    q_words = set(q.split())
-    d_words = set(d.split())
-    if q_words and q_words <= d_words:
-        return 0.8 - 0.01 * len(d_words - q_words)
-    if not q_words:
-        return 0.0
-    overlap = len(q_words & d_words)
-    return 0.5 * (overlap / len(q_words))
-
-
-def _filter_and_rank(
-    results: list[dict[str, str]],
-    query: str,
-) -> list[dict[str, str]]:
-    """Re-rank results by name similarity to the query."""
-    scored = [(r, _name_match_score(r.get("display", ""), query)) for r in results]
-    scored.sort(key=lambda x: -x[1])
-    return [r for r, _s in scored]
 
 
 _singleton: OmopHubClient | None = None
