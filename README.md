@@ -17,19 +17,55 @@ No data is persisted server-side. Each request is stateless.
 
 ```
 impl/
-  backend/          FastAPI single-service ETL (Python ≥ 3.11)
+  backend/          FastAPI single-service ETL (Python ≥ 3.12)
     api/            HTTP handlers, Pydantic models, LLM client, terminology proxy, config CRUD
     pipeline/       seven in-process stages (connector → adapter → cleaner → validator → qualifier → mapper → fhir + omop)
     domain/         canonical event model, quality rules, value-level utils
     configs/        adapter YAML configs (also the LLM few-shot corpus)
     pyproject.toml
-  frontend/         Next.js (client-only, output: export) + Monaco editor
+  frontend/         Next.js (client-only, standalone) + Monaco editor
   sample_data/      test fixtures (mHealth, Fitabase CSVs, clinical pilots, serious games, VR, questionnaires)
 ```
 
-## Backend
+## Quick start (Docker)
 
-Requirements: Python 3.11+.
+Requirements: Docker and Docker Compose.
+
+```bash
+# 1. Create backend/.env with your API keys (see "Environment variables" below)
+cp backend/.env.example backend/.env
+
+# 2. Build and start both services
+docker compose up -d
+
+# 3. Open the app
+#    Frontend: http://localhost:3000
+#    Backend:  http://localhost:8000/api/healthz
+```
+
+To rebuild after code changes:
+
+```bash
+docker compose up -d --build
+```
+
+To stop:
+
+```bash
+docker compose down
+```
+
+The frontend container bakes `NEXT_PUBLIC_API_BASE_URL` at build time (defaults to `http://localhost:8000`). Override it for non-local deployments:
+
+```bash
+docker compose build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com frontend
+```
+
+## Local development (without Docker)
+
+### Backend
+
+Requirements: Python 3.12+.
 
 ```bash
 cd backend
@@ -39,20 +75,7 @@ cp .env.example .env
 uvicorn api.main:app --reload --port 8000
 ```
 
-Or via Docker: `docker compose up -d` (single service `api` on :8000).
-
-Endpoints (see `backend/api/routes.py`):
-
-- `POST /api/generate-config` — `{ data, description, hints?, source? }` → `{ id, yaml }`
-- `POST /api/transform` — `{ data, yaml, source?, device?, format?, concept_mappings? }` → `{ events, stats, bundle?, omop_cdm?, concept_slots, adapter_diagnostics }`
-- `POST /api/suggest-config-fix` — `{ yaml, diagnostics, sample_record, description? }` → `{ yaml }` (LLM-patched config)
-- `POST /api/suggest-concepts` — `{ slots }` → `{ suggestions, no_matches, errors }` (LLM + OMOPHub terminology mapping)
-- `GET /api/terminology/search` — `?system=loinc&q=heart+rate&max=20` → terminology code search (OMOPHub proxy)
-- `GET /api/configs` / `GET /api/configs/{id}` / `PUT /api/configs/{id}` — config CRUD
-- `POST /api/configs/match` — `{ data, format, source? }` → ranked config matches
-- `GET /api/healthz`
-
-## Frontend
+### Frontend
 
 Requirements: Node 18+.
 
@@ -64,6 +87,19 @@ npm run dev
 ```
 
 Open http://localhost:3000.
+
+## API endpoints
+
+See `backend/api/routes.py` for full details.
+
+- `POST /api/generate-config` — `{ data, description, hints?, source? }` → `{ id, yaml }`
+- `POST /api/transform` — `{ data, yaml, source?, device?, format?, concept_mappings? }` → `{ events, stats, bundle?, omop_cdm?, concept_slots, adapter_diagnostics }`
+- `POST /api/suggest-config-fix` — `{ yaml, diagnostics, sample_record, description? }` → `{ yaml }` (LLM-patched config)
+- `POST /api/suggest-concepts` — `{ slots }` → `{ suggestions, no_matches, errors }` (LLM + OMOPHub terminology mapping)
+- `GET /api/terminology/search` — `?system=loinc&q=heart+rate&max=20` → terminology code search (OMOPHub proxy)
+- `GET /api/configs` / `GET /api/configs/{id}` / `PUT /api/configs/{id}` — config CRUD
+- `POST /api/configs/match` — `{ data, format, source? }` → ranked config matches
+- `GET /api/healthz`
 
 ## Environment variables
 

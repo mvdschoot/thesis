@@ -11,13 +11,11 @@ dependencies = [
   "langchain>=0.3",
   "langchain-core>=0.3",
   "langchain-anthropic>=0.3",
+  "langchain-openai",
+  "langchain-google-genai",
   "python-multipart>=0.0.12",
   "omophub>=0.1",
 ]
-
-[project.optional-dependencies]
-openai = ["langchain-openai>=0.3"]
-google = ["langchain-google-genai>=2.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
