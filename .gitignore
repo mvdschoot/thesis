@@ -1,5 +1,8 @@
 sample_data
 
+.vscode
+.claude
+
 # Python
 __pycache__/
 *.py[cod]
