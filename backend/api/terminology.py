@@ -33,7 +33,7 @@ BULK_SEARCH_PATH = "/search/semantic-bulk"
 TermSystem = Literal["loinc", "ucum", "snomed", "rxnorm", "icd10", "cpt"]
 
 # Frontend-facing system name → OMOPHub vocabulary_id filter.
-_VOCAB_FILTER: dict[str, str] = {
+VOCAB_FILTER: dict[str, str] = {
     "loinc": "LOINC",
     "ucum": "UCUM",
     "snomed": "SNOMED",
@@ -182,7 +182,7 @@ class OmopHubClient:
         query: str,
         max_results: int = 20,
     ) -> list[dict[str, Any]]:
-        vocab = _VOCAB_FILTER.get(system)
+        vocab = VOCAB_FILTER.get(system)
         if vocab is None:
             raise TerminologyError(f"Unsupported terminology system: {system}")
 

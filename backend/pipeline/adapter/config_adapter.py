@@ -54,6 +54,8 @@ def _resolve_path(obj: Any, path: str) -> Any:
     """
     if obj is None:
         return None
+    if path in (".", "@", ""):
+        return obj
 
     parts = re.split(r"\.", path)
     current = obj
@@ -272,7 +274,12 @@ def _explain_predicate(
     delegates here) and for explaining `can_handle` misses to the user.
     """
     field = condition["field"]
-    value = _resolve_path(record, field)
+    # Try direct key first (handles keys with literal dots like
+    # "2. Lack of engagement?"), fall back to dot-path resolution.
+    if isinstance(record, dict) and field in record:
+        value = record[field]
+    else:
+        value = _resolve_path(record, field)
 
     if "equals" in condition and value != condition["equals"]:
         return ("equals", condition["equals"], value)
@@ -502,17 +509,37 @@ class ConfigAdapter(BaseAdapter):
                     events.append(event)
         elif "iterate_object" in rule:
             obj_spec = rule["iterate_object"]
-            source_path = obj_spec.get("source")
-            source_obj = _resolve_path(record, source_path) if source_path else None
+            source_spec = obj_spec.get("source")
+            source_label = str(source_spec)
+            if source_spec is None:
+                source_obj = record
+            elif isinstance(source_spec, str):
+                source_obj = _resolve_path(record, source_spec)
+                source_label = source_spec
+            elif isinstance(source_spec, dict) and "path" in source_spec:
+                source_obj = _resolve_path(record, source_spec["path"])
+                source_label = source_spec["path"]
+            else:
+                source_obj = None
             if source_obj is None:
                 if collector is not None:
-                    collector.record_skip(
-                        code="iterate_object_source_none",
-                        detail=(
+                    code = "iterate_object_source_none"
+                    detail = (
+                        f"Rule '{rule_id}': iterate_object source "
+                        f"{source_spec!r} did not resolve in this record."
+                    )
+                    if isinstance(source_spec, dict) and "path" not in source_spec:
+                        code = "iterate_object_source_invalid"
+                        detail = (
                             f"Rule '{rule_id}': iterate_object source "
-                            f"'{source_path}' did not resolve in this record."
-                        ),
-                        path=source_path,
+                            f"{source_spec!r} is not a valid spec "
+                            f"(expected string path, dict with 'path' key, "
+                            f"or omit)."
+                        )
+                    collector.record_skip(
+                        code=code,
+                        detail=detail,
+                        path=source_label,
                         record_keys=top_level_keys(record),
                     )
             elif not isinstance(source_obj, dict):
@@ -521,42 +548,84 @@ class ConfigAdapter(BaseAdapter):
                         code="iterate_object_source_not_dict",
                         detail=(
                             f"Rule '{rule_id}': iterate_object source "
-                            f"'{source_path}' resolved to {type(source_obj).__name__} "
-                            "(expected object)."
+                            f"{source_spec!r} resolved to "
+                            f"{type(source_obj).__name__} (expected object)."
                         ),
-                        path=source_path,
+                        path=source_label,
                         actual=type(source_obj).__name__,
                         expected="object",
                     )
             else:
-                missing_keys: list[str] = []
-                for entry in obj_spec.get("entries", []):
-                    key = entry["key"]
-                    if key in source_obj:
+                entries = obj_spec.get("entries")
+                if entries is not None:
+                    missing_keys: list[str] = []
+                    for entry in entries:
+                        key = entry["key"]
+                        if key in source_obj:
+                            item = {
+                                "key": key,
+                                "name": key,
+                                "question": key,
+                                "label": entry.get("label", key),
+                                "value": source_obj[key],
+                            }
+                            event = self._build_event(
+                                rule, record, metadata, group_id, ingested_at, parent_id, item,
+                                record_index=record_index,
+                            )
+                            events.append(event)
+                        else:
+                            missing_keys.append(key)
+                    if not events and missing_keys and collector is not None:
+                        collector.record_skip(
+                            code="iterate_object_keys_missing",
+                            detail=(
+                                f"Rule '{rule_id}': none of the configured "
+                                f"iterate_object entry keys ({missing_keys}) were "
+                                f"present under {source_spec!r}."
+                            ),
+                            path=source_label,
+                            expected=missing_keys,
+                            actual=list(source_obj.keys()),
+                        )
+                elif obj_spec.get("all_keys"):
+                    exclude = set(obj_spec.get("exclude", []))
+                    for k in source_obj:
+                        if k in exclude:
+                            continue
                         item = {
-                            "key": key,
-                            "label": entry.get("label", key),
-                            "value": source_obj[key],
+                            "key": k,
+                            "name": k,
+                            "question": k,
+                            "label": k,
+                            "value": source_obj[k],
                         }
                         event = self._build_event(
                             rule, record, metadata, group_id, ingested_at, parent_id, item,
                             record_index=record_index,
                         )
                         events.append(event)
-                    else:
-                        missing_keys.append(key)
-                if not events and missing_keys and collector is not None:
-                    collector.record_skip(
-                        code="iterate_object_keys_missing",
-                        detail=(
-                            f"Rule '{rule_id}': none of the configured "
-                            f"iterate_object entry keys ({missing_keys}) were "
-                            f"present under '{source_path}'."
-                        ),
-                        path=source_path,
-                        expected=missing_keys,
-                        actual=list(source_obj.keys()),
-                    )
+                    if not events and collector is not None:
+                        collector.record_skip(
+                            code="iterate_object_keys_missing",
+                            detail=(
+                                f"Rule '{rule_id}': all_keys mode produced "
+                                f"no events (source has "
+                                f"{len(source_obj)} key(s), "
+                                f"{len(exclude)} excluded)."
+                            ),
+                            path=source_label,
+                            actual=list(source_obj.keys()),
+                        )
+                else:
+                    if collector is not None:
+                        collector.record_skip(
+                            code="iterate_object_keys_missing",
+                            detail=(
+                                f"Rule '{rule_id}': iterate_object has "
+                                f"neither 'entries' nor 'all_keys: true'."
+                            ),
+                        )
         else:
             event = self._build_event(
                 rule, record, metadata, group_id, ingested_at, parent_id, None,
@@ -581,7 +650,8 @@ class ConfigAdapter(BaseAdapter):
         ri = record_index
 
         subject_spec = self._defaults.get("subject_id", {})
-        subject_id = _resolve_value(subject_spec, record, item, record_index=ri) or ""
+        subject_id_raw = _resolve_value(subject_spec, record, item, record_index=ri)
+        subject_id = "" if subject_id_raw is None else str(subject_id_raw)
 
         ts_spec = rule.get("timestamp", {})
         timestamp = _resolve_value(ts_spec.get("start"), record, item, record_index=ri) or ""

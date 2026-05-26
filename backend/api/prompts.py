@@ -66,7 +66,11 @@ Rule structure:
 - category: a string (often a value-spec resolving the category from `@item`).
 - granularity: "instant" | "interval" | "daily" | "session" | "unknown".
 - iterate: path to a list inside the record — one event per element. `@item` references resolve against that element.
-- iterate_object: `{ source, entries: [{ key, label }, ...] }` — expand an object with fixed keys.
+- iterate_object: expand an object's keys into one event per key.
+    - `source` (optional): path to the source dict. Defaults to the root record. Use `"."` or omit for flat CSVs.
+    - `entries: [{ key, label }, ...]` — explicit list of keys to iterate.
+    - `all_keys: true` — auto-iterate every key in the source dict. Use `exclude: [Timestamp, ...]` to skip non-question columns. Preferred for questionnaire/survey CSVs with many columns — avoids listing every column.
+    - Each iteration produces an item with fields: `key`, `name` (= key), `label`, `value`. Reference them as `@item.name`, `@item.value`, `@item.label`, etc.
 - timestamp: { start: <spec>, end?: <spec>, duration_seconds?: <spec> }.
 - payload: { value, raw_value, unit, label, components: [{name, value, unit?}, ...] }.
 - Value vs. components separation (MANDATORY):

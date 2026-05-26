@@ -383,23 +383,28 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
     from langchain_core.tools import tool as _tool_decorator
 
     @_tool_decorator
-    def search_terminology(systems: str | list[str], query: str) -> str:
+    def search_terminology(searches: list[dict[str, str]]) -> str:
         """Search medical terminology databases for standard codes.
 
+        Submit ALL lookups in a SINGLE call. Up to 25 searches per call.
+
         Args:
-            system: "loinc", "ucum", "snomed", "rxnorm", "icd10", or "cpt".
-            query: Natural-language search terms, or a code number to validate.
+            searches: list of {query, system} objects.
+                system: "loinc", "ucum", "snomed", "rxnorm", "icd10", or "cpt".
+                query: Natural-language search terms, or a code number to validate.
 
         Returns:
-            JSON array of matching concepts with system, code, and display.
+            JSON list of {query, system, results} in the same order as input.
         """
-        result = _raw_search_tool.invoke({"systems": systems, "query": query})
+        result = _raw_search_tool.invoke({"searches": searches})
         try:
             items = _json.loads(result)
             if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, dict) and item.get("code"):
-                        seen_codes.add((item.get("system", ""), item["code"]))
+                for group in items:
+                    if isinstance(group, dict):
+                        for item in group.get("results", []):
+                            if isinstance(item, dict) and item.get("code"):
+                                seen_codes.add((item.get("system", ""), item["code"]))
         except _json.JSONDecodeError:
             pass
         return result
