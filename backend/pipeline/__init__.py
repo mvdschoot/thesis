@@ -20,7 +20,7 @@ from . import adapter, cleaner, connector, fhir, mapper, omop, qualifier, valida
 from .adapter.config_adapter import ConfigAdapter
 from .adapter.diagnostics import AdapterDiagnostics, DiagnosticsCollector
 
-__all__ = ["run_pipeline", "AdapterDiagnostics"]
+__all__ = ["run_pipeline", "scan_concepts", "AdapterDiagnostics"]
 
 
 def _strip_quality_overrides(events: list[CanonicalEvent]) -> None:
@@ -33,6 +33,44 @@ def _strip_quality_overrides(events: list[CanonicalEvent]) -> None:
             del event.extensions["_quality_override"]
             if not event.extensions:
                 event.extensions = None
+
+
+def scan_concepts(
+    *,
+    data: Any,
+    yaml_text: str | None = None,
+    parsed_config: dict[str, Any] | None = None,
+    source: str | None = None,
+    format: str = "json",
+    device: str | None = None,
+) -> tuple[list[dict[str, Any]], AdapterDiagnostics]:
+    """Lightweight concept-slot discovery.
+
+    Runs only connector → adapter → mapper.detect_slots(), skipping cleaner,
+    validator, qualifier, FHIR, and OMOP. Designed for a small sample so the
+    frontend can show concept slots before committing to a full transform.
+    """
+    if parsed_config is not None:
+        parsed = parsed_config
+    elif yaml_text is not None:
+        parsed = yaml.safe_load(yaml_text) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError("YAML must be a mapping at the top level.")
+    else:
+        raise ValueError("Either yaml_text or parsed_config must be provided.")
+
+    config_adapter = ConfigAdapter.from_dict(parsed)
+    collector = DiagnosticsCollector()
+
+    metadata, records = connector.run(data, format=format, source=source, device=device)
+    structured = adapter.run(
+        records, metadata=metadata, adapter=config_adapter, diagnostics=collector,
+    )
+    adapter_diagnostics = collector.finalize(len(structured))
+
+    cleaned = cleaner.run(structured, config=config_adapter.clean_block)
+    slots = mapper.detect_slots(cleaned, mappings=None)
+    return [s.to_dict() for s in slots], adapter_diagnostics
 
 
 def run_pipeline(

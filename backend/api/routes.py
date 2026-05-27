@@ -14,7 +14,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Query
 
 from domain.models import SourceMetadata
-from pipeline import connector, run_pipeline
+from pipeline import connector, run_pipeline, scan_concepts
 from pipeline.adapter.config_adapter import ConfigAdapter
 
 from . import configs_store
@@ -233,6 +233,31 @@ def transform(req: TransformRequest) -> TransformResponse:
     except (KeyError, ValueError) as e:
         raise HTTPException(status_code=400, detail=f"Config is missing required sections: {e}")
 
+    # ── Concept-scan fast path ──────────────────────────────────────────────
+    if req.concept_scan_only:
+        try:
+            concept_slots, adapter_diagnostics = scan_concepts(
+                data=req.data,
+                parsed_config=config,
+                source=req.source,
+                format=req.format,
+                device=req.device,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        return TransformResponse(
+            events=[],
+            stats={"count": 0, "subjects": [], "flags": {}},
+            bundle=None,
+            omop_cdm=None,
+            concept_slots=concept_slots,
+            adapter_diagnostics=AdapterDiagnosticsOut.model_validate(
+                adapter_diagnostics.to_dict()
+            ),
+        )
+
+    # ── Full pipeline ─────────────────────────────────────────────────────
     # Pydantic Coding → plain dict so the mapper stage stays framework-agnostic.
     concept_mappings = (
         {k: v.model_dump() for k, v in req.concept_mappings.items()}
@@ -255,8 +280,6 @@ def transform(req: TransformRequest) -> TransformResponse:
     fhir_stats = stats.pop("fhir", None)
     bundle = fhir_stats.get("bundle") if isinstance(fhir_stats, dict) else None
     if isinstance(fhir_stats, dict):
-        # Surface counts/size in stats for the UI; the bundle itself moves to
-        # a top-level field so the frontend can render it without spelunking.
         stats["fhir.resource_count"] = fhir_stats.get("resource_count", 0)
         stats["fhir.size_bytes"] = fhir_stats.get("size_bytes", 0)
 

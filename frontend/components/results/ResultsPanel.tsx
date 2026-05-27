@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cx } from "@/lib/cx";
 import type { AdapterDiagnostics, NoMatchSlot } from "@/lib/api";
@@ -31,6 +31,7 @@ interface Props {
   yamlText: string;
   inputData: unknown;
   onApplyYaml: (yaml: string) => void;
+  scanPhase?: boolean;
 }
 
 type View = "events" | "concepts" | "fhir" | "omop" | "debug";
@@ -52,8 +53,16 @@ export default function ResultsPanel({
   yamlText,
   inputData,
   onApplyYaml,
+  scanPhase,
 }: Props) {
   const [view, setView] = useState<View>("events");
+  const prevScanPhase = useRef(scanPhase);
+  useEffect(() => {
+    if (scanPhase && !prevScanPhase.current) {
+      setView("concepts");
+    }
+    prevScanPhase.current = scanPhase;
+  }, [scanPhase]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = events.find((e) => e.event_id === selectedId) ?? null;
 
@@ -95,12 +104,21 @@ export default function ResultsPanel({
         )}
       </p>
 
+      {scanPhase && (
+        <div className="card" style={{ marginBottom: 14, padding: "10px 16px", borderLeft: "3px solid var(--accent, #5af)" }}>
+          <strong>Concept scan complete</strong> — {conceptSlots.length} slot{conceptSlots.length !== 1 ? "s" : ""} found from a 100-record sample.
+          Map your concepts below, then click <em>Transform all</em> to process the full dataset.
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, margin: "12px 0 6px", flexWrap: "wrap" }}>
         <button
           className={cx("btn", view === "events" && "primary")}
           onClick={() => setView("events")}
+          disabled={scanPhase}
+          style={scanPhase ? { opacity: 0.5 } : undefined}
         >
-          Events ({events.length})
+          Events {scanPhase ? "" : `(${events.length})`}
         </button>
         <button
           className={cx("btn", view === "concepts" && "primary")}
@@ -116,16 +134,20 @@ export default function ResultsPanel({
         <button
           className={cx("btn", view === "fhir" && "primary")}
           onClick={() => setView("fhir")}
+          disabled={scanPhase}
+          style={scanPhase ? { opacity: 0.5 } : undefined}
           title="View the FHIR R4 Bundle produced by the pipeline"
         >
-          FHIR Bundle{bundle ? ` (${bundle.entry?.length ?? 0})` : ""}
+          FHIR Bundle{!scanPhase && bundle ? ` (${bundle.entry?.length ?? 0})` : ""}
         </button>
         <button
           className={cx("btn", view === "omop" && "primary")}
           onClick={() => setView("omop")}
+          disabled={scanPhase}
+          style={scanPhase ? { opacity: 0.5 } : undefined}
           title="View the OMOP CDM v5.4 tables produced by the pipeline"
         >
-          OMOP CDM{omopRowCount > 0 ? ` (${omopRowCount})` : ""}
+          OMOP CDM{!scanPhase && omopRowCount > 0 ? ` (${omopRowCount})` : ""}
         </button>
         <button
           className={cx("btn", view === "debug" && "primary")}

@@ -13,6 +13,7 @@ interface Props {
   configHint?: string;
   batchProgress?: BatchProgress | null;
   onCancel?: () => void;
+  scanPhase?: boolean;
 }
 
 export default function Topbar({
@@ -25,6 +26,7 @@ export default function Topbar({
   configHint,
   batchProgress,
   onCancel,
+  scanPhase,
 }: Props) {
   const isBatched = batchProgress != null && batchProgress.batchCount > 1;
   return (
@@ -109,13 +111,15 @@ export default function Topbar({
         className="btn primary"
         onClick={onRun}
         disabled={running || !canRun}
-        title={canRun ? "Run the pipeline" : "Load data and select a config first"}
+        title={canRun ? (scanPhase ? "Transform the full dataset with mapped concepts" : "Run the pipeline") : "Load data and select a config first"}
       >
         {running ? (
           <>
             <span className="spin" />
-            {isBatched ? "Batching…" : "Running…"}
+            {isBatched ? "Batching…" : scanPhase ? "Scanning…" : "Running…"}
           </>
+        ) : scanPhase ? (
+          <>Transform all →</>
         ) : (
           <>Run pipeline →</>
         )}

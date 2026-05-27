@@ -19,6 +19,8 @@ const BATCH_BYTE_LIMIT = 8 * 1024 * 1024;
 const SKIP_BATCH_THRESHOLD_RECORDS = 1000;
 const SKIP_BATCH_THRESHOLD_BYTES = 4 * 1024 * 1024;
 export const MATCH_SAMPLE_SIZE = 50;
+export const CONCEPT_SCAN_THRESHOLD = 500;
+const CONCEPT_SCAN_SAMPLE_SIZE = 100;
 
 export interface BatchChunk {
   data: unknown;
@@ -34,7 +36,7 @@ export interface BatchProgress {
   error?: string;
 }
 
-function countRecords(data: unknown, format: TransformFormat): number {
+export function countRecords(data: unknown, format: TransformFormat): number {
   if (format === "csv") {
     const text = data as string;
     const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
@@ -136,6 +138,25 @@ export function sampleForMatch(
   }
 
   return text;
+}
+
+export function sampleForScan(
+  data: unknown,
+  format: TransformFormat,
+  maxRecords: number = CONCEPT_SCAN_SAMPLE_SIZE,
+): unknown {
+  if (format === "csv") {
+    const text = data as string;
+    const lines = text.split(/\r?\n/);
+    const header = lines[0] ?? "";
+    const dataLines = lines.slice(1).filter((l) => l.trim() !== "");
+    if (dataLines.length <= maxRecords) return text;
+    return header + "\n" + dataLines.slice(0, maxRecords).join("\n");
+  }
+  if (Array.isArray(data) && data.length > maxRecords) {
+    return data.slice(0, maxRecords);
+  }
+  return data;
 }
 
 // ── Response merging ──────────────────────────────────────────────────────────

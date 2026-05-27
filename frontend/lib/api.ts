@@ -87,6 +87,7 @@ export interface TransformRequest {
   device?: string;
   format?: TransformFormat;
   concept_mappings?: Record<string, import("./types").Coding>;
+  concept_scan_only?: boolean;
 }
 
 export interface TransformStats {

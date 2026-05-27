@@ -81,6 +81,10 @@ class TransformRequest(BaseModel):
             "key scheme (code|... / unit|... / component|... / category|...)."
         ),
     )
+    concept_scan_only: bool = Field(
+        default=False,
+        description="Only discover concept slots (skip cleaning, validation, qualification, FHIR, OMOP).",
+    )
 
 
 class SkippedReasonOut(BaseModel):

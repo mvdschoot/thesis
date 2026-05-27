@@ -22,6 +22,9 @@ import {
   splitIntoBatches,
   mergeResponses,
   sampleForMatch,
+  sampleForScan,
+  countRecords,
+  CONCEPT_SCAN_THRESHOLD,
   type BatchProgress,
 } from "@/lib/batch";
 import { summarizeClean, summarizeQualify, summarizeValidate } from "@/lib/rules";
@@ -84,6 +87,10 @@ export default function Page() {
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Concept scan phase — true when we've done a lightweight slot scan on a
+  // sample and are waiting for the user to map concepts before the full run.
+  const [scanPhase, setScanPhase] = useState(false);
 
   // Config matching state — populated by /api/configs/match against the current input.
   const [configMatches, setConfigMatches] = useState<ConfigMatch[] | null>(null);
@@ -221,6 +228,9 @@ export default function Page() {
     if (inputMode === "sample") return SAMPLE_DATASETS[datasetKey]?.source ?? "";
     return customSource.trim();
   }, [inputMode, datasetKey, customSource]);
+
+  // Reset scan phase whenever pipeline inputs change.
+  useEffect(() => { setScanPhase(false); }, [inputData, configKey, activeFormat]);
 
   // Sampled version of input for config matching — first 50 records only.
   const matchSampleString: string | null = useMemo(() => {
@@ -373,6 +383,36 @@ export default function Page() {
       setConceptMappings({});
       setConceptNoMatches({});
     }
+
+    // ── Concept-scan fast path for large inputs ──────────────────────────
+    const recordCount = countRecords(inputData, activeFormat);
+    if (
+      !opts?.preserveConcepts &&
+      Object.keys(mappingsToSend).length === 0 &&
+      recordCount > CONCEPT_SCAN_THRESHOLD
+    ) {
+      setScanPhase(true);
+      try {
+        const sample = sampleForScan(inputData, activeFormat);
+        const scanRes = await transform({
+          data: sample,
+          yaml: yamlText,
+          source: sourceName || undefined,
+          format: activeFormat,
+          concept_scan_only: true,
+        });
+        setRunResult(scanRes);
+        setActiveStage("results");
+      } catch (e) {
+        setScanPhase(false);
+        setRunError((e as Error).message);
+      } finally {
+        setRunning(false);
+      }
+      return;
+    }
+
+    setScanPhase(false);
 
     const chunks = splitIntoBatches(inputData, activeFormat);
 
@@ -536,7 +576,7 @@ export default function Page() {
   return (
     <div className="app">
       <Topbar
-        onRun={() => handleRun()}
+        onRun={() => handleRun(scanPhase ? { preserveConcepts: true } : undefined)}
         running={running}
         canRun={canRun}
         configKey={configKey}
@@ -545,6 +585,7 @@ export default function Page() {
         configHint={configHint}
         batchProgress={batchProgress}
         onCancel={cancelBatch}
+        scanPhase={scanPhase}
       />
       <StageStrip stages={stageDefs} active={activeStage} onJump={setActiveStage} />
 
@@ -665,6 +706,7 @@ export default function Page() {
             yamlText={yamlText}
             inputData={inputData}
             onApplyYaml={applyPatchedYaml}
+            scanPhase={scanPhase}
           />
         )}
 
