@@ -1,5 +1,7 @@
 "use client";
 
+import type { BatchProgress } from "@/lib/batch";
+
 interface Props {
   onRun: () => void;
   running: boolean;
@@ -9,6 +11,8 @@ interface Props {
   configIds: string[];
   /** Optional helper text under the picker (e.g. "fitbit · 3 emit rules"). */
   configHint?: string;
+  batchProgress?: BatchProgress | null;
+  onCancel?: () => void;
 }
 
 export default function Topbar({
@@ -19,7 +23,10 @@ export default function Topbar({
   setConfigKey,
   configIds,
   configHint,
+  batchProgress,
+  onCancel,
 }: Props) {
+  const isBatched = batchProgress != null && batchProgress.batchCount > 1;
   return (
     <div className="topbar">
       <div className="brand">
@@ -56,6 +63,48 @@ export default function Topbar({
       </div>
 
       <div className="chip mono">POST /api/transform</div>
+
+      {isBatched && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 8 }}>
+          <div style={{ minWidth: 180 }}>
+            <div style={{ fontSize: 12, opacity: 0.85, whiteSpace: "nowrap" }}>
+              Batch {batchProgress.batchIndex + 1}/{batchProgress.batchCount}
+              {batchProgress.eventsProcessed > 0 && (
+                <span style={{ opacity: 0.6 }}> · {batchProgress.eventsProcessed.toLocaleString()} events</span>
+              )}
+            </div>
+            <div
+              style={{
+                height: 3,
+                borderRadius: 2,
+                background: "var(--surface-2, #333)",
+                marginTop: 3,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  borderRadius: 2,
+                  width: `${Math.round(((batchProgress.batchIndex + (batchProgress.status === "running" ? 0.5 : 1)) / batchProgress.batchCount) * 100)}%`,
+                  background: batchProgress.status === "error" ? "var(--err, #e55)" : "var(--accent, #5af)",
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
+          </div>
+          {onCancel && batchProgress.status === "running" && (
+            <button
+              className="btn"
+              onClick={onCancel}
+              style={{ fontSize: 12, padding: "3px 10px" }}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
+
       <button
         className="btn primary"
         onClick={onRun}
@@ -65,7 +114,7 @@ export default function Topbar({
         {running ? (
           <>
             <span className="spin" />
-            Running…
+            {isBatched ? "Batching…" : "Running…"}
           </>
         ) : (
           <>Run pipeline →</>

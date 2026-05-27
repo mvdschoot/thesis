@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AdapterPanel from "@/components/adapter/AdapterPanel";
 import ConnectorPanel, { type InputMode } from "@/components/connector/ConnectorPanel";
@@ -18,6 +18,12 @@ import {
   type TransformFormat,
   type TransformResponse,
 } from "@/lib/api";
+import {
+  splitIntoBatches,
+  mergeResponses,
+  sampleForMatch,
+  type BatchProgress,
+} from "@/lib/batch";
 import { summarizeClean, summarizeQualify, summarizeValidate } from "@/lib/rules";
 import { SAMPLE_CONFIGS, SAMPLE_DATASETS, SIMULATED_EVENTS } from "@/lib/sampleData";
 import type { AdapterConfig, CanonicalEvent, Coding } from "@/lib/types";
@@ -73,6 +79,11 @@ export default function Page() {
   // Concept-mapping state (session-only, sent on each /api/transform call).
   const [conceptMappings, setConceptMappings] = useState<Record<string, Coding>>({});
   const [conceptNoMatches, setConceptNoMatches] = useState<Record<string, import("@/lib/api").NoMatchSlot>>({});
+
+  // Batch processing state
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Config matching state — populated by /api/configs/match against the current input.
   const [configMatches, setConfigMatches] = useState<ConfigMatch[] | null>(null);
@@ -211,18 +222,24 @@ export default function Page() {
     return customSource.trim();
   }, [inputMode, datasetKey, customSource]);
 
+  // Sampled version of input for config matching — first 50 records only.
+  const matchSampleString: string | null = useMemo(() => {
+    if (inputDataString == null) return null;
+    return sampleForMatch(inputData, inputDataString, activeFormat);
+  }, [inputData, inputDataString, activeFormat]);
+
   // ── Ask the backend which registered configs apply to the current input.
   // Debounced so paste/keystroke streams don't spam the endpoint. Failures
   // hide the panel rather than surface noise — same forgiving pattern as
-  // listConfigs above.
+  // listConfigs above. Only sends a small sample of the input data.
   useEffect(() => {
-    if (inputDataString == null) {
+    if (matchSampleString == null) {
       setConfigMatches(null);
       return;
     }
     let cancelled = false;
     const t = setTimeout(() => {
-      matchConfigs(inputDataString, activeFormat, sourceName || undefined)
+      matchConfigs(matchSampleString, activeFormat, sourceName || undefined)
         .then((res) => {
           if (!cancelled) setConfigMatches(res);
         })
@@ -234,7 +251,7 @@ export default function Page() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [inputDataString, activeFormat, sourceName]);
+  }, [matchSampleString, activeFormat, sourceName]);
 
   const events: CanonicalEvent[] = runResult?.events ?? SIMULATED_EVENTS;
   const eventSource: "live" | "simulated" = runResult ? "live" : "simulated";
@@ -338,6 +355,10 @@ export default function Page() {
 
   const canRun = inputData != null && config != null;
 
+  const cancelBatch = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   async function handleRun(opts?: { preserveConcepts?: boolean }) {
     if (!canRun || !config) {
       setRunError("Need both input data and an adapter config before running.");
@@ -345,29 +366,133 @@ export default function Page() {
     }
     setRunError(null);
     setRunning(true);
-    try {
-      const yamlText = dumpAdapterYaml(config);
-      const mappingsToSend = opts?.preserveConcepts ? conceptMappings : {};
-      // Fresh runs (from Topbar) clear stale picks so slots reflect the new
-      // dataset; re-runs from the Concepts tab keep the current picks.
-      if (!opts?.preserveConcepts) {
-        setConceptMappings({});
-        setConceptNoMatches({});
+
+    const yamlText = dumpAdapterYaml(config);
+    const mappingsToSend = opts?.preserveConcepts ? conceptMappings : {};
+    if (!opts?.preserveConcepts) {
+      setConceptMappings({});
+      setConceptNoMatches({});
+    }
+
+    const chunks = splitIntoBatches(inputData, activeFormat);
+
+    if (chunks.length === 1) {
+      // Single-request fast path — no batching overhead.
+      try {
+        const res = await transform({
+          data: chunks[0].data,
+          yaml: yamlText,
+          source: sourceName || undefined,
+          format: activeFormat,
+          concept_mappings:
+            Object.keys(mappingsToSend).length > 0 ? mappingsToSend : undefined,
+        });
+        setRunResult(res);
+        setActiveStage("results");
+      } catch (e) {
+        setRunError((e as Error).message);
+      } finally {
+        setRunning(false);
+        setBatchProgress(null);
       }
-      const res = await transform({
-        data: inputData,
-        yaml: yamlText,
-        source: sourceName || undefined,
-        format: activeFormat,
-        concept_mappings:
-          Object.keys(mappingsToSend).length > 0 ? mappingsToSend : undefined,
+      return;
+    }
+
+    // Multi-batch path.
+    if (batchTimeoutRef.current) {
+      clearTimeout(batchTimeoutRef.current);
+      batchTimeoutRef.current = null;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const partials: TransformResponse[] = [];
+    let eventsProcessed = 0;
+
+    setBatchProgress({
+      batchIndex: 0,
+      batchCount: chunks.length,
+      eventsProcessed: 0,
+      status: "running",
+    });
+
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        if (controller.signal.aborted) break;
+
+        setBatchProgress({
+          batchIndex: i,
+          batchCount: chunks.length,
+          eventsProcessed,
+          status: "running",
+        });
+
+        const res = await transform(
+          {
+            data: chunks[i].data,
+            yaml: yamlText,
+            source: sourceName || undefined,
+            format: activeFormat,
+            concept_mappings:
+              Object.keys(mappingsToSend).length > 0 ? mappingsToSend : undefined,
+          },
+          controller.signal,
+        );
+
+        partials.push(res);
+        eventsProcessed += res.events.length;
+      }
+
+      if (controller.signal.aborted && partials.length > 0) {
+        setRunResult(mergeResponses(partials));
+        setRunError(
+          `Cancelled after batch ${partials.length}/${chunks.length}. Showing partial results.`,
+        );
+      } else if (partials.length > 0) {
+        setRunResult(mergeResponses(partials));
+      }
+
+      setBatchProgress({
+        batchIndex: chunks.length - 1,
+        batchCount: chunks.length,
+        eventsProcessed,
+        status: controller.signal.aborted ? "error" : "done",
       });
-      setRunResult(res);
       setActiveStage("results");
     } catch (e) {
-      setRunError((e as Error).message);
+      const isAbort = e instanceof DOMException && e.name === "AbortError";
+      if (isAbort) {
+        if (partials.length > 0) {
+          setRunResult(mergeResponses(partials));
+          setRunError(
+            `Cancelled after batch ${partials.length}/${chunks.length}. Showing partial results.`,
+          );
+        } else {
+          setRunError("Cancelled.");
+        }
+      } else if (partials.length > 0) {
+        setRunResult(mergeResponses(partials));
+        setRunError(
+          `Batch ${partials.length + 1}/${chunks.length} failed: ${(e as Error).message}. Showing partial results (batches 1–${partials.length}).`,
+        );
+      } else {
+        setRunError((e as Error).message);
+      }
+      setBatchProgress({
+        batchIndex: partials.length,
+        batchCount: chunks.length,
+        eventsProcessed,
+        status: "error",
+      });
+      setActiveStage("results");
     } finally {
       setRunning(false);
+      abortRef.current = null;
+      batchTimeoutRef.current = setTimeout(() => {
+        setBatchProgress(null);
+        batchTimeoutRef.current = null;
+      }, 2000);
     }
   }
 
@@ -418,6 +543,8 @@ export default function Page() {
         setConfigKey={setConfigKey}
         configIds={configIds}
         configHint={configHint}
+        batchProgress={batchProgress}
+        onCancel={cancelBatch}
       />
       <StageStrip stages={stageDefs} active={activeStage} onJump={setActiveStage} />
 

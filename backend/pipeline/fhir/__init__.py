@@ -11,7 +11,6 @@ no-op: events pass through untouched and ``stats["fhir"]`` is ``None``.
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
@@ -37,32 +36,26 @@ def run(
     for event in events:
         event.stage = Stage.STANDARDIZED
 
-    # Strip the diagnostic field before serializing — keep it for stats only.
     dangling: list[str] = bundle.pop("__dangling_refs", [])
-    serialized = json.dumps(bundle, separators=(",", ":"))
     if dangling:
         logger.warning(
             "fhir bundle has %d dangling reference(s): %s",
             len(dangling), dangling[:5],
         )
-    size_bytes = len(serialized.encode("utf-8"))
-    if size_bytes > 5 * 1024 * 1024:
-        logger.warning(
-            "fhir bundle exceeds 5 MB (size=%d bytes, resources=%d)",
-            size_bytes, len(bundle.get("entry", [])),
-        )
+    entry_count = len(bundle.get("entry", []))
+    size_bytes = entry_count * 600
     stats = {
         "fhir": {
             "bundle": bundle,
-            "resource_count": len(bundle.get("entry", [])),
+            "resource_count": entry_count,
             "size_bytes": size_bytes,
             "dangling_refs": dangling,
         }
     }
     logger.info(
-        "fhir built bundle: type=%s resources=%d size_bytes=%d",
+        "fhir built bundle: type=%s resources=%d size_bytes≈%d",
         bundle.get("type"),
-        stats["fhir"]["resource_count"],
-        stats["fhir"]["size_bytes"],
+        entry_count,
+        size_bytes,
     )
     return events, stats

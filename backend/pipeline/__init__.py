@@ -38,7 +38,8 @@ def _strip_quality_overrides(events: list[CanonicalEvent]) -> None:
 def run_pipeline(
     *,
     data: Any,
-    yaml_text: str,
+    yaml_text: str | None = None,
+    parsed_config: dict[str, Any] | None = None,
     source: str | None = None,
     format: str = "json",
     device: str | None = None,
@@ -48,10 +49,18 @@ def run_pipeline(
     `(events, stats, adapter_diagnostics)`. The diagnostics object captures
     why the adapter stage emitted (or didn't emit) events per rule — the
     other stages currently don't drop events, so this is adapter-scoped.
+
+    Pass ``parsed_config`` (an already-parsed YAML dict) to skip re-parsing
+    the YAML text. If both are provided, ``parsed_config`` takes precedence.
     """
-    parsed = yaml.safe_load(yaml_text) or {}
-    if not isinstance(parsed, dict):
-        raise ValueError("YAML must be a mapping at the top level.")
+    if parsed_config is not None:
+        parsed = parsed_config
+    elif yaml_text is not None:
+        parsed = yaml.safe_load(yaml_text) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError("YAML must be a mapping at the top level.")
+    else:
+        raise ValueError("Either yaml_text or parsed_config must be provided.")
     config_adapter = ConfigAdapter.from_dict(parsed)
 
     collector = DiagnosticsCollector()

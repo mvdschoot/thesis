@@ -243,7 +243,7 @@ def transform(req: TransformRequest) -> TransformResponse:
     try:
         events, stats, adapter_diagnostics = run_pipeline(
             data=req.data,
-            yaml_text=req.yaml,
+            parsed_config=config,
             source=req.source,
             format=req.format,
             device=req.device,

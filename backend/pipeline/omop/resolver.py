@@ -9,11 +9,17 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 logger = logging.getLogger("pipeline.omop.resolver")
+
+_CACHE_TTL = 600  # 10 minutes
+_cache_lock = threading.Lock()
+_resolution_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 
 _BASE_URL = "https://api.omophub.com/v1"
 
@@ -88,7 +94,9 @@ def batch_resolve(
     """Resolve a list of FHIR codings to OMOP concepts.
 
     Returns a dict mapping ``(system, code)`` → resolution from the API.
-    Unresolved codings get :data:`_EMPTY_RESOLUTION`.
+    Unresolved codings get :data:`_EMPTY_RESOLUTION`.  Results are cached
+    in-process for ``_CACHE_TTL`` seconds so repeated batch-transform
+    requests with the same codings don't re-hit the external API.
     """
     if not codings:
         return {}
@@ -100,10 +108,30 @@ def batch_resolve(
             for c in codings
         }
 
-    cache: dict[tuple[str, str], dict[str, Any]] = {}
+    now = time.monotonic()
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+    uncached: list[dict[str, str]] = []
 
-    for i in range(0, len(codings), 100):
-        chunk = codings[i : i + 100]
+    with _cache_lock:
+        for c in codings:
+            cache_key = (c["system"], c["code"], resource_type)
+            entry = _resolution_cache.get(cache_key)
+            if entry and (now - entry[0]) < _CACHE_TTL:
+                result[(c["system"], c["code"])] = dict(entry[1])
+            else:
+                uncached.append(c)
+
+    if not uncached:
+        logger.info("omophub batch resolve: all %d codings served from cache", len(codings))
+        return result
+
+    logger.info(
+        "omophub batch resolve: %d cached, %d to fetch",
+        len(codings) - len(uncached), len(uncached),
+    )
+
+    for i in range(0, len(uncached), 100):
+        chunk = uncached[i : i + 100]
         try:
             data = _http_post("/fhir/resolve/batch", {
                 "codings": chunk,
@@ -127,9 +155,9 @@ def batch_resolve(
                     continue
                 resolution = item.get("resolution")
                 if resolution and isinstance(resolution, dict):
-                    cache[(sys, code)] = resolution
+                    result[(sys, code)] = resolution
                 else:
-                    cache[(sys, code)] = dict(_EMPTY_RESOLUTION)
+                    result[(sys, code)] = dict(_EMPTY_RESOLUTION)
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="replace")[:300] if e.fp else ""
             logger.warning(
@@ -138,18 +166,24 @@ def batch_resolve(
             )
             for c in chunk:
                 key = (c["system"], c["code"])
-                if key not in cache:
-                    cache[key] = _resolve_single(c, api_key, resource_type)
+                if key not in result:
+                    result[key] = _resolve_single(c, api_key, resource_type)
         except Exception as exc:
             logger.error("omophub batch resolve failed for chunk %d: %s", i, exc)
             for c in chunk:
                 key = (c["system"], c["code"])
-                if key not in cache:
-                    cache[key] = dict(_EMPTY_RESOLUTION)
+                if key not in result:
+                    result[key] = dict(_EMPTY_RESOLUTION)
 
-    for c in codings:
+    for c in uncached:
         key = (c["system"], c["code"])
-        if key not in cache:
-            cache[key] = dict(_EMPTY_RESOLUTION)
+        if key not in result:
+            result[key] = dict(_EMPTY_RESOLUTION)
 
-    return cache
+    with _cache_lock:
+        for c in uncached:
+            key = (c["system"], c["code"])
+            if key in result:
+                _resolution_cache[(key[0], key[1], resource_type)] = (now, result[key])
+
+    return result

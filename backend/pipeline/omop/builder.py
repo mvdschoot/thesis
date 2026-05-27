@@ -60,24 +60,30 @@ _MODALITY_SEARCH_QUERIES: dict[str, str] = {
 }
 
 
+_type_concept_cache: dict[str, int] = {}
+
+
 def _resolve_type_concepts(modalities: set[str]) -> dict[str, int]:
     """Resolve type concept IDs from OMOPHub via bulk semantic search.
 
     Falls back to an empty dict on any failure — callers merge with
-    ``_TYPE_CONCEPT_FALLBACK``.
+    ``_TYPE_CONCEPT_FALLBACK``.  Results are cached in-process so
+    repeated batch-transform calls skip the network round-trip.
     """
+    uncached = [m for m in modalities if m in _MODALITY_SEARCH_QUERIES and m not in _type_concept_cache]
+    cached = {m: _type_concept_cache[m] for m in modalities if m in _type_concept_cache}
+
+    if not uncached:
+        return cached
+
     try:
         from api.terminology import get_client as get_terminology_client
     except ImportError:
-        return {}
-
-    queries = [m for m in modalities if m in _MODALITY_SEARCH_QUERIES]
-    if not queries:
-        return {}
+        return cached
 
     seen_queries: dict[str, str] = {}
     searches: list[dict[str, str]] = []
-    for mod in queries:
+    for mod in uncached:
         q = _MODALITY_SEARCH_QUERIES[mod]
         if q not in seen_queries:
             seen_queries[q] = mod
@@ -99,18 +105,19 @@ def _resolve_type_concepts(modalities: set[str]) -> dict[str, int]:
         )
     except Exception as exc:
         logger.warning("omop type concept resolution failed, using fallback: %s", exc)
-        return {}
+        return cached
 
-    resolved: dict[str, int] = {}
-    for mod in queries:
+    for mod in uncached:
         hits = results.get(mod, [])
         if hits and isinstance(hits[0], dict) and hits[0].get("concept_id"):
-            resolved[mod] = int(hits[0]["concept_id"])
+            concept_id = int(hits[0]["concept_id"])
+            _type_concept_cache[mod] = concept_id
+            cached[mod] = concept_id
             logger.info(
                 "omop type concept %s → %d (%s)",
-                mod, resolved[mod], hits[0].get("display"),
+                mod, concept_id, hits[0].get("display"),
             )
-    return resolved
+    return cached
 
 
 def _person_id(subject_id: str) -> int:

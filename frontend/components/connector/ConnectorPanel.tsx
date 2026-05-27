@@ -158,58 +158,11 @@ export default function ConnectorPanel({
                     style={{ display: "none" }}
                   />
                 </div>
-                <div className="spacer-md" />
-                <div className="row">
-                  <div className="field" style={{ flex: 0 }}>
-                    <label>Format</label>
-                    <div className="seg" style={{ alignSelf: "flex-start" }}>
-                      <button
-                        className={customFormat === "json" ? "on" : ""}
-                        onClick={() => setCustomFormat("json")}
-                      >
-                        JSON
-                      </button>
-                      <button
-                        className={customFormat === "csv" ? "on" : ""}
-                        onClick={() => setCustomFormat("csv")}
-                      >
-                        CSV
-                      </button>
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label>Source name</label>
-                    <input
-                      className="input mono"
-                      value={customSource}
-                      placeholder="e.g. fitbit, withings, fitabase"
-                      onChange={(e) => setCustomSource(e.target.value)}
-                    />
-                  </div>
-                </div>
+                
                 <div className="help">
                   Source name is sent to the backend as the record&apos;s <span className="mono">_metadata.source</span> and is what the adapter&apos;s <span className="mono">match.source</span> compares against. Set this before generating an adapter config so the LLM knows what to write.
                 </div>
-                <div className="spacer-sm" />
-                <div className="field">
-                  <label>{customFormat === "csv" ? "Or paste CSV" : "Or paste JSON"}</label>
-                  <textarea
-                    className="textarea mono"
-                    rows={8}
-                    placeholder={
-                      customFormat === "csv"
-                        ? "Id,ActivityDate,TotalSteps\n1503960366,4/12/2016,13162\n…"
-                        : '{ "userId": "u-...", ... }'
-                    }
-                    value={customText}
-                    onChange={(e) => setCustomText(e.target.value)}
-                  />
-                  {customError && (
-                    <p className="help" style={{ color: "var(--err)" }}>
-                      {customError}
-                    </p>
-                  )}
-                </div>
+                
               </>
             )}
           </div>

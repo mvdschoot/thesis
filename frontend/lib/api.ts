@@ -7,8 +7,9 @@ async function request<T>(
   path: string,
   method: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const init: RequestInit = { method, headers: { "Content-Type": "application/json" } };
+  const init: RequestInit = { method, headers: { "Content-Type": "application/json" }, signal };
   if (body !== undefined) init.body = JSON.stringify(body);
   const res = await fetch(`${API_BASE}${path}`, init);
   if (!res.ok) {
@@ -22,8 +23,8 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
-function post<T>(path: string, body: unknown): Promise<T> {
-  return request<T>(path, "POST", body);
+function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, "POST", body, signal);
 }
 
 function get<T>(path: string): Promise<T> {
@@ -151,8 +152,8 @@ export function generateConfig(req: GenerateConfigRequest) {
   return post<GenerateConfigResponse>("/api/generate-config", req);
 }
 
-export function transform(req: TransformRequest) {
-  return post<TransformResponse>("/api/transform", req);
+export function transform(req: TransformRequest, signal?: AbortSignal) {
+  return post<TransformResponse>("/api/transform", req, signal);
 }
 
 export function suggestConfigFix(req: SuggestFixRequest) {

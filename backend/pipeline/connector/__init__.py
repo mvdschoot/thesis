@@ -5,10 +5,9 @@ SourceMetadata used downstream and the parsed record list.
 """
 from __future__ import annotations
 
-import json as _json
+import csv
+import io
 import logging
-import tempfile
-from pathlib import Path
 from typing import Any
 
 from domain.models import SourceMetadata
@@ -20,6 +19,19 @@ from .json_connector import JsonConnector
 __all__ = ["BaseConnector", "CsvConnector", "JsonConnector", "run"]
 
 logger = logging.getLogger("pipeline.connector")
+
+
+def _parse_csv_in_memory(data: str) -> list[dict[str, Any]]:
+    reader = csv.DictReader(io.StringIO(data))
+    return [dict(row) for row in reader]
+
+
+def _parse_json_in_memory(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return [data]
+    raise ValueError(f"Expected JSON array or object, got {type(data).__name__}")
 
 
 def run(
@@ -34,29 +46,9 @@ def run(
     if format == "csv":
         if not isinstance(data, str):
             raise ValueError("format='csv' requires data to be raw CSV text.")
-        suffix = ".csv"
+        records = _parse_csv_in_memory(data)
     else:
-        suffix = ".json"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=suffix, delete=False, encoding="utf-8", newline=""
-    ) as tmp:
-        if format == "csv":
-            tmp.write(data)
-        else:
-            _json.dump(data, tmp)
-        tmp_path = Path(tmp.name)
-
-    try:
-        connector = CsvConnector(metadata) if format == "csv" else JsonConnector(metadata)
-        records: list[dict[str, Any]] = []
-        for _meta, record in connector.read(tmp_path):
-            records.append(record)
-    finally:
-        try:
-            tmp_path.unlink()
-        except OSError:
-            pass
+        records = _parse_json_in_memory(data)
 
     logger.info("connector emitted %d records (format=%s)", len(records), format)
     return metadata, records

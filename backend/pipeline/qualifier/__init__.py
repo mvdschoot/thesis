@@ -27,12 +27,11 @@ def run(
 ) -> tuple[list[CanonicalEvent], dict[str, Any]]:
     qualifier = Qualifier(rules=load_rules(), config=config)
     qualified = qualifier.apply_all(events)
-    event_dicts = [e.to_dict() for e in qualified]
     logger.info("qualifier processed %d events", len(qualified))
-    return qualified, _stats(event_dicts)
+    return qualified, _stats(qualified)
 
 
-def _stats(events: list[dict[str, Any]]) -> dict[str, Any]:
+def _stats(events: list[CanonicalEvent]) -> dict[str, Any]:
     flag_counter: Counter[str] = Counter()
     severity_counter: Counter[str] = Counter()
     stage_counter: Counter[str] = Counter()
@@ -40,20 +39,18 @@ def _stats(events: list[dict[str, Any]]) -> dict[str, Any]:
     conformance_counter: Counter[str] = Counter()
     subjects: set[str] = set()
     for ev in events:
-        subjects.add(ev.get("subject_id", ""))
-        stage_counter[ev.get("stage", "unknown")] += 1
-        quality = ev.get("quality") or {}
-        if quality.get("plausibility"):
-            plausibility_counter[quality["plausibility"]] += 1
-        if quality.get("conformance"):
-            conformance_counter[quality["conformance"]] += 1
-        for f in quality.get("flags", []) or []:
-            code = f.get("code")
-            if code:
-                flag_counter[code] += 1
-            severity = f.get("severity")
-            if severity:
-                severity_counter[severity] += 1
+        subjects.add(ev.subject_id)
+        stage_counter[ev.stage.value if ev.stage else "unknown"] += 1
+        q = ev.quality
+        if q.plausibility:
+            plausibility_counter[q.plausibility] += 1
+        if q.conformance:
+            conformance_counter[q.conformance] += 1
+        for f in q.flags:
+            if f.code:
+                flag_counter[f.code] += 1
+            if f.severity:
+                severity_counter[f.severity.value if hasattr(f.severity, "value") else f.severity] += 1
     return {
         "count": len(events),
         "subjects": sorted(s for s in subjects if s),
