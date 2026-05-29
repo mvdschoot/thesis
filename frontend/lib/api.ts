@@ -35,11 +35,17 @@ function put<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, "PUT", body);
 }
 
+export interface Descriptor {
+  filename: string;
+  content: string;
+}
+
 export interface GenerateConfigRequest {
   data: unknown;
   description: string;
   hints?: string;
   source?: string;
+  descriptors?: Descriptor[];
 }
 
 export interface GenerateConfigResponse {
@@ -60,6 +66,7 @@ export interface ConfigSummary {
 export interface ConfigPayload {
   id: string;
   yaml: string;
+  descriptors?: Descriptor[];
 }
 
 export interface ConfigMatch {

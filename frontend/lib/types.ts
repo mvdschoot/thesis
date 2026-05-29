@@ -262,6 +262,8 @@ export interface Coding {
   display?: string | null;
   confidence?: "high" | "medium" | "low" | null;
   concept_id?: number | null;
+  // OMOP standard_concept flag: "S" standard, "C" classification, null/undefined non-standard.
+  standard_concept?: "S" | "C" | null;
 }
 
 export type ConceptSlotKind = "code" | "unit" | "component" | "category";

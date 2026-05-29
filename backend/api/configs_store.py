@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import BaseModel
 
 from pipeline.adapter.config_adapter import ConfigAdapter
+
+if TYPE_CHECKING:
+    from .models import Descriptor
 
 # api/configs_store.py → backend/configs/
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -38,6 +42,7 @@ class ConfigSummary(BaseModel):
 class ConfigPayload(BaseModel):
     id: str
     yaml: str
+    descriptors: list[dict[str, Any]] = []
 
 
 def _slugify(value: str) -> str:
@@ -53,6 +58,39 @@ def _path_for(config_id: str) -> Path:
             f"use only letters, digits, '-' and '_'."
         )
     return CONFIGS_DIR / f"{safe}.yaml"
+
+
+def _descriptors_path_for(config_id: str) -> Path:
+    """Sidecar holding the descriptor files uploaded when the config was generated.
+
+    Stored as `{id}.descriptors.json` so it sits next to `{id}.yaml` but is
+    invisible to the `*.yaml` globs that drive config listing/matching.
+    """
+    return CONFIGS_DIR / f"{config_id}.descriptors.json"
+
+
+def _write_descriptors(config_id: str, descriptors: list[Descriptor] | None) -> list[dict[str, Any]]:
+    if not descriptors:
+        return []
+    serialized = [{"filename": d.filename, "content": d.content} for d in descriptors]
+    _descriptors_path_for(config_id).write_text(
+        json.dumps(serialized, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return serialized
+
+
+def _read_descriptors(config_id: str) -> list[dict[str, Any]]:
+    path = _descriptors_path_for(config_id)
+    if not path.is_file():
+        return []
+    try:
+        parsed = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Skipping descriptors for %s: invalid JSON", config_id)
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [item for item in parsed if isinstance(item, dict)]
 
 
 def _parse_and_validate(yaml_text: str) -> dict[str, Any]:
@@ -109,7 +147,11 @@ def get_config(config_id: str) -> ConfigPayload:
     path = _path_for(config_id)
     if not path.is_file():
         raise ConfigStoreError(f"Config '{config_id}' not found.", status_code=404)
-    return ConfigPayload(id=config_id, yaml=path.read_text(encoding="utf-8"))
+    return ConfigPayload(
+        id=config_id,
+        yaml=path.read_text(encoding="utf-8"),
+        descriptors=_read_descriptors(config_id),
+    )
 
 
 def load_parsed_configs() -> list[tuple[str, dict[str, Any]]]:
@@ -129,7 +171,9 @@ def load_parsed_configs() -> list[tuple[str, dict[str, Any]]]:
     return results
 
 
-def save_new_config(yaml_text: str) -> ConfigPayload:
+def save_new_config(
+    yaml_text: str, descriptors: list[Descriptor] | None = None
+) -> ConfigPayload:
     parsed = _parse_and_validate(yaml_text)
     adapter_block = parsed.get("adapter") or {}
     base_id = str(adapter_block.get("id") or "").strip()
@@ -150,7 +194,8 @@ def save_new_config(yaml_text: str) -> ConfigPayload:
         yaml_text = yaml.safe_dump(parsed, sort_keys=False)
 
     (CONFIGS_DIR / f"{candidate}.yaml").write_text(yaml_text, encoding="utf-8")
-    return ConfigPayload(id=candidate, yaml=yaml_text)
+    saved_descriptors = _write_descriptors(candidate, descriptors)
+    return ConfigPayload(id=candidate, yaml=yaml_text, descriptors=saved_descriptors)
 
 
 def update_config(config_id: str, yaml_text: str) -> ConfigPayload:

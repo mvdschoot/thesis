@@ -241,6 +241,12 @@ class OmopHubClient:
         return results[:max_n]
 
 
+def _norm_standard(value: Any) -> str | None:
+    """Normalize OMOP ``standard_concept`` to "S", "C", or None (non-standard)."""
+    s = str(value).strip().upper() if value is not None else ""
+    return s if s in ("S", "C") else None
+
+
 def _extract_results(data: Any) -> list[dict[str, Any]]:
     """Pull the result list out of OMOPHub's response shape.
 
@@ -284,6 +290,9 @@ def _parse_response(data: Any) -> list[dict[str, Any]]:
             "system": system_uri,
             "code": str(code),
             "display": str(name) if name else str(code),
+            # OMOP standard_concept flag: "S" standard, "C" classification,
+            # None non-standard. Surfaced so the UI can mark OMOP-standard codes.
+            "standard_concept": _norm_standard(item.get("standard_concept")),
         }
         omop_id = item.get("concept_id")
         if omop_id is not None:
@@ -333,6 +342,7 @@ def _parse_bulk_response(data: Any) -> dict[str, list[dict[str, Any]]]:
                 "system": system_uri,
                 "code": str(code),
                 "display": str(name) if name else str(code),
+                "standard_concept": _norm_standard(item.get("standard_concept")),
             }
             omop_id = item.get("concept_id")
             if omop_id is not None:

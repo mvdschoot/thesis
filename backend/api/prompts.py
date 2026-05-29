@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .models import Descriptor
 
 # api/prompts.py → backend/
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -12,6 +15,21 @@ CANONICAL_MODEL_PATH = BACKEND_DIR / "domain" / "models.py"
 FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitabase-fitbit-csv.yaml"]
 
 MAX_SAMPLE_BYTES = 20_000
+# Per-file cap for descriptor content embedded into the prompt. Schemas/specs
+# can be large; the full content is still stored in the config sidecar.
+MAX_DESCRIPTOR_BYTES = 32_000
+
+# Map descriptor file extensions to a fenced-code-block language hint.
+_FENCE_LANG = {
+    ".json": "json",
+    ".avsc": "json",
+    ".avro": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".xml": "xml",
+}
 
 
 DSL_OVERVIEW = """\
@@ -192,12 +210,44 @@ def _truncate_sample(data: Any) -> str:
     return (note + "\n" + body) if note else body
 
 
+def _fence_lang_for(filename: str) -> str:
+    return _FENCE_LANG.get(Path(filename).suffix.lower(), "")
+
+
+def _truncate_descriptor(content: str) -> str:
+    encoded = content.encode("utf-8")
+    if len(encoded) <= MAX_DESCRIPTOR_BYTES:
+        return content
+    return encoded[:MAX_DESCRIPTOR_BYTES].decode("utf-8", errors="ignore") + "\n... [truncated]"
+
+
+def _descriptor_block(descriptors: list[Descriptor]) -> list[str]:
+    """Render uploaded descriptor files as labeled fenced code blocks."""
+    parts = [
+        "",
+        "## Input data descriptors / schema (user-supplied)",
+        "These files describe the input data (schema, spec, or data dictionary). "
+        "Use them to derive field meanings, required keys, and constraints.",
+    ]
+    for d in descriptors:
+        lang = _fence_lang_for(d.filename)
+        parts += [
+            "",
+            f"### Descriptor: {d.filename}",
+            f"```{lang}",
+            _truncate_descriptor(d.content),
+            "```",
+        ]
+    return parts
+
+
 def build_user_prompt(
     *,
     description: str,
     hints: str | None,
     data: Any,
     source: str | None,
+    descriptors: list[Descriptor] | None = None,
 ) -> str:
     parts = [
         "## Data description (user-supplied)",
@@ -213,6 +263,10 @@ def build_user_prompt(
         "```json",
         _truncate_sample(data),
         "```",
+    ]
+    if descriptors:
+        parts += _descriptor_block(descriptors)
+    parts += [
         "",
         "Before emitting: derive a rigid `match.record` from the sample above. "
         "Require existence of every field your `defaults` and `emit` rules read, "

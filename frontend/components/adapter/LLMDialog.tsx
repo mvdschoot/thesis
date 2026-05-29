@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { generateConfig } from "@/lib/api";
+import { generateConfig, type Descriptor } from "@/lib/api";
+import { cx } from "@/lib/cx";
 
 type DialogStage = "input" | "thinking" | "done" | "error";
+
+const DESCRIPTOR_ACCEPT = ".json,.avsc,.avro,.md,.markdown,.txt,.yaml,.yml,.csv,.xml";
 
 interface Props {
   data: unknown | null;
   source: string;
   onClose: () => void;
-  onApply: (yamlText: string, configId: string) => void;
+  onApply: (yamlText: string, configId: string, descriptors: Descriptor[]) => void;
 }
 
 export default function LLMDialog({ data, source, onClose, onApply }: Props) {
@@ -19,6 +22,29 @@ export default function LLMDialog({ data, source, onClose, onApply }: Props) {
   const [hint, setHint] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<{ id: string; yaml: string } | null>(null);
+  const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
+  const [drag, setDrag] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function addFiles(files: FileList | File[]) {
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result !== "string") return;
+        setDescriptors((prev) => {
+          // Replace a same-named file rather than stacking duplicates.
+          const next = prev.filter((d) => d.filename !== file.name);
+          return [...next, { filename: file.name, content: result }];
+        });
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  function removeDescriptor(filename: string) {
+    setDescriptors((prev) => prev.filter((d) => d.filename !== filename));
+  }
 
   async function run() {
     if (!data) {
@@ -38,6 +64,7 @@ export default function LLMDialog({ data, source, onClose, onApply }: Props) {
         description,
         hints: hint || undefined,
         source: source || undefined,
+        descriptors: descriptors.length ? descriptors : undefined,
       });
       setGenerated(res);
       setStage("done");
@@ -80,6 +107,70 @@ export default function LLMDialog({ data, source, onClose, onApply }: Props) {
                   placeholder='e.g. "iterate over results array; treat email as subject_id"'
                   onChange={(e) => setHint(e.target.value)}
                 />
+              </div>
+              <div className="field">
+                <label>Descriptor files (optional)</label>
+                <div
+                  className={cx("dropzone", drag && "dragover")}
+                  onClick={() => fileRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDrag(true);
+                  }}
+                  onDragLeave={() => setDrag(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDrag(false);
+                    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+                  }}
+                >
+                  <div style={{ fontSize: 13, marginBottom: 6 }}>
+                    Drop schema / spec files (JSON Schema, Avro, markdown…) or click to browse
+                  </div>
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    Passed to the LLM as extra context and saved with the config.
+                  </div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    accept={DESCRIPTOR_ACCEPT}
+                    onChange={(e) => {
+                      if (e.target.files?.length) addFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                    style={{ display: "none" }}
+                  />
+                </div>
+                {descriptors.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {descriptors.map((d) => (
+                      <div
+                        key={d.filename}
+                        className="row"
+                        style={{ alignItems: "center", gap: 8 }}
+                      >
+                        <span className="mono" style={{ fontSize: 12, flex: 1, minWidth: 0 }}>
+                          {d.filename}
+                        </span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          {d.content.length.toLocaleString()} chars
+                        </span>
+                        <button
+                          className="btn"
+                          style={{ padding: "2px 8px" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDescriptor(d.filename);
+                          }}
+                          aria-label={`Remove ${d.filename}`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="help">
                 Few-shot corpus: <span className="mono">backend/configs/*.yaml</span> · prompt:{" "}
@@ -147,7 +238,7 @@ export default function LLMDialog({ data, source, onClose, onApply }: Props) {
                 <button
                   className="btn accent"
                   onClick={() => {
-                    onApply(generated.yaml, generated.id);
+                    onApply(generated.yaml, generated.id, descriptors);
                     onClose();
                   }}
                 >

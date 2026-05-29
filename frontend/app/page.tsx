@@ -15,6 +15,7 @@ import {
   matchConfigs,
   transform,
   type ConfigMatch,
+  type Descriptor,
   type TransformFormat,
   type TransformResponse,
 } from "@/lib/api";
@@ -66,6 +67,8 @@ export default function Page() {
   const [backendIds, setBackendIds] = useState<string[]>([]);
   const [adapterLoading, setAdapterLoading] = useState(false);
   const [adapterError, setAdapterError] = useState<string | null>(null);
+  // Descriptor files saved with each backend config, keyed by config id.
+  const [descriptorMap, setDescriptorMap] = useState<Record<string, Descriptor[]>>({});
 
   // Stage navigation
   const [activeStage, setActiveStage] = useState<string>("connector");
@@ -130,6 +133,7 @@ export default function Page() {
         try {
           const parsed = parseAdapterYaml(payload.yaml);
           setConfigMap((m) => ({ ...m, [configKey]: parsed }));
+          setDescriptorMap((m) => ({ ...m, [configKey]: payload.descriptors ?? [] }));
         } catch (e) {
           setAdapterError((e as Error).message);
         }
@@ -151,10 +155,11 @@ export default function Page() {
     setConfigMap((m) => ({ ...m, [configKey]: next }));
   };
 
-  const onLLMResult = (yamlText: string, configId: string) => {
+  const onLLMResult = (yamlText: string, configId: string, descriptors: Descriptor[]) => {
     try {
       const parsed = parseAdapterYaml(yamlText);
       setConfigMap((m) => ({ ...m, [configId]: parsed }));
+      setDescriptorMap((m) => ({ ...m, [configId]: descriptors }));
       setBackendIds((ids) => (ids.includes(configId) ? ids : [...ids, configId]));
       setConfigKey(configId);
     } catch (e) {
@@ -626,6 +631,7 @@ export default function Page() {
             inputData={inputData}
             source={sourceName}
             onLLMResult={onLLMResult}
+            descriptors={descriptorMap[configKey] ?? []}
             loading={adapterLoading}
             loadError={adapterError}
             matches={configMatches}

@@ -7,11 +7,17 @@ from pydantic import BaseModel, Field
 
 type InputFormat = Literal["json"] | Literal["csv"]
 
+class Descriptor(BaseModel):
+    filename: str
+    content: str
+
+
 class GenerateConfigRequest(BaseModel):
     data: Any
     description: str = ""
     hints: str | None = None
     source: str | None = None
+    descriptors: list[Descriptor] = []
 
 
 class GenerateConfigResponse(BaseModel):
@@ -54,6 +60,8 @@ class Coding(BaseModel):
     display: str | None = None
     confidence: Literal["high", "medium", "low"] | None = None
     concept_id: int | None = None
+    # OMOP standard_concept flag: "S" standard, "C" classification, None non-standard.
+    standard_concept: Literal["S", "C"] | None = None
 
 
 class ConceptSlot(BaseModel):
@@ -164,3 +172,4 @@ class TerminologySearchResult(BaseModel):
     code: str
     display: str
     concept_id: int | None = None
+    standard_concept: Literal["S", "C"] | None = None

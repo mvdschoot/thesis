@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { updateConfig, type ConfigMatch } from "@/lib/api";
+import { updateConfig, type ConfigMatch, type Descriptor } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { AdapterConfig } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
@@ -22,7 +22,9 @@ interface Props {
   setConfigKey: (k: string) => void;
   inputData: unknown | null;
   source: string;
-  onLLMResult: (yamlText: string, configId: string) => void;
+  onLLMResult: (yamlText: string, configId: string, descriptors: Descriptor[]) => void;
+  /** Descriptor files saved with the active config (read-only display). */
+  descriptors?: Descriptor[];
   loading?: boolean;
   loadError?: string | null;
   matches?: ConfigMatch[] | null;
@@ -39,6 +41,7 @@ export default function AdapterPanel({
   inputData,
   source,
   onLLMResult,
+  descriptors,
   loading,
   loadError,
   matches,
@@ -48,6 +51,7 @@ export default function AdapterPanel({
   const [showYaml, setShowYaml] = useState(initialYamlMode === true);
   const [emitIdx, setEmitIdx] = useState(0);
   const [showLLM, setShowLLM] = useState(false);
+  const [openDescriptor, setOpenDescriptor] = useState<string | null>(null);
 
   // YAML editor state — only meaningful while showYaml is true.
   const [yamlText, setYamlText] = useState<string>("");
@@ -433,6 +437,71 @@ export default function AdapterPanel({
             )}
           </div>
         </div>
+      )}
+
+      {descriptors && descriptors.length > 0 && (
+        <>
+          <div className="spacer-md" />
+          <div className="card">
+            <div className="card-head">
+              <span className="eyebrow">Descriptor files</span>
+              <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>
+                {descriptors.length} file{descriptors.length === 1 ? "" : "s"} · sent to the LLM during generation
+              </span>
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {descriptors.map((d) => {
+                const open = openDescriptor === d.filename;
+                return (
+                  <div key={d.filename} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <button
+                      onClick={() => setOpenDescriptor(open ? null : d.filename)}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        background: "transparent",
+                        border: "none",
+                        padding: "10px 14px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        cursor: "pointer",
+                        color: "inherit",
+                        font: "inherit",
+                      }}
+                    >
+                      <span className="muted" style={{ fontSize: 11, width: 12 }}>
+                        {open ? "▾" : "▸"}
+                      </span>
+                      <span className="mono" style={{ flex: 1, minWidth: 0 }}>
+                        {d.filename}
+                      </span>
+                      <span className="muted" style={{ fontSize: 11 }}>
+                        {d.content.length.toLocaleString()} chars
+                      </span>
+                    </button>
+                    {open && (
+                      <pre
+                        className="mono"
+                        style={{
+                          margin: 0,
+                          padding: "0 14px 14px 36px",
+                          fontSize: 12,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          maxHeight: 320,
+                          overflow: "auto",
+                        }}
+                      >
+                        {d.content}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       {showLLM && (

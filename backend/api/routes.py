@@ -82,6 +82,7 @@ def generate_config(req: GenerateConfigRequest) -> GenerateConfigResponse:
         hints=req.hints,
         data=req.data,
         source=req.source,
+        descriptors=req.descriptors,
     )
 
     try:
@@ -98,7 +99,7 @@ def generate_config(req: GenerateConfigRequest) -> GenerateConfigResponse:
         raise HTTPException(status_code=502, detail=f"LLM returned invalid YAML: {e}")
 
     try:
-        saved = configs_store.save_new_config(yaml_text)
+        saved = configs_store.save_new_config(yaml_text, descriptors=req.descriptors)
     except ConfigStoreError as e:
         raise HTTPException(status_code=502, detail=f"LLM returned unusable config: {e}")
 
@@ -402,6 +403,7 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
     from .llm.tools import search_terminology as _raw_search_tool
 
     seen_codes: set[tuple[str, str]] = set()
+    seen_standard: dict[tuple[str, str], str | None] = {}
 
     from langchain_core.tools import tool as _tool_decorator
 
@@ -427,7 +429,9 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
                     if isinstance(group, dict):
                         for item in group.get("results", []):
                             if isinstance(item, dict) and item.get("code"):
-                                seen_codes.add((item.get("system", ""), item["code"]))
+                                key_tuple = (item.get("system", ""), item["code"])
+                                seen_codes.add(key_tuple)
+                                seen_standard[key_tuple] = item.get("standard_concept")
         except _json.JSONDecodeError:
             pass
         return result
@@ -480,11 +484,13 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
         confidence = val.get("confidence")
         if confidence not in ("high", "medium", "low"):
             confidence = None
+        sc = seen_standard.get((val["system"], val["code"]))
         suggestions[key] = Coding(
             system=val["system"],
             code=val["code"],
             display=val.get("display"),
             confidence=confidence,
+            standard_concept=sc if sc in ("S", "C") else None,
         )
 
     hallucinated = [

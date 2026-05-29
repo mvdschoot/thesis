@@ -331,6 +331,28 @@ function SlotRow({ slot, coding, noMatch, onChange }: SlotRowProps) {
   );
 }
 
+// OMOP standard_concept indicator. `undefined` (e.g. local/category codings,
+// not sourced from OMOPHub) renders nothing; "S" is standard, "C"/null are not.
+function StandardBadge({ value }: { value?: "S" | "C" | null }) {
+  if (value === undefined) return null;
+  if (value === "S") {
+    return (
+      <span className="chip ok" title="OMOP standard concept (standard_concept = S)">
+        Standard
+      </span>
+    );
+  }
+  const title =
+    value === "C"
+      ? "OMOP classification concept (standard_concept = C) — not a standard concept"
+      : "Non-standard concept (standard_concept is null)";
+  return (
+    <span className="chip" title={title}>
+      Non-standard
+    </span>
+  );
+}
+
 function CodingChip({ coding, pinned }: { coding: Coding; pinned: boolean }) {
   const system = coding.system
     .replace("http://", "")
@@ -353,15 +375,18 @@ function CodingChip({ coding, pinned }: { coding: Coding; pinned: boolean }) {
   const confLabel = conf && conf !== "high" ? ` [${conf} confidence]` : "";
 
   return (
-    <span
-      className={cx("chip mono", chipClass)}
-      title={`${coding.system} · ${coding.code}${confLabel}`}
-      style={{ maxWidth: "100%" }}
-    >
-      {conf === "low" && "⚠ "}
-      {system} · {coding.code}
-      {coding.display ? ` · ${coding.display}` : ""}
-      {conf === "medium" && " ?"}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%" }}>
+      <span
+        className={cx("chip mono", chipClass)}
+        title={`${coding.system} · ${coding.code}${confLabel}`}
+        style={{ minWidth: 0 }}
+      >
+        {conf === "low" && "⚠ "}
+        {system} · {coding.code}
+        {coding.display ? ` · ${coding.display}` : ""}
+        {conf === "medium" && " ?"}
+      </span>
+      <StandardBadge value={coding.standard_concept} />
     </span>
   );
 }
@@ -488,7 +513,9 @@ function SearchBox({
               className="btn ghost"
               onClick={() => onPick(r)}
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
                 width: "100%",
                 textAlign: "left",
                 marginBottom: 4,
@@ -498,7 +525,8 @@ function SearchBox({
               title={`${r.system} · ${r.code}`}
             >
               <span className="mono" style={{ color: "var(--ink-3)" }}>{r.code}</span>
-              <span style={{ marginLeft: 8 }}>{r.display ?? ""}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>{r.display ?? ""}</span>
+              <StandardBadge value={r.standard_concept} />
             </button>
           ))}
       </div>
