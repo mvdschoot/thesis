@@ -39,15 +39,17 @@ def run(
         "observation_count": len(cdm["observation"]),
         "device_exposure_count": len(cdm["device_exposure"]),
         "observation_period_count": len(cdm["observation_period"]),
+        "concept_count": len(cdm.get("concept", [])),
         "unmapped_count": len(cdm.get("unmapped", [])),
         "component_rows": cdm.pop("_component_rows", 0),
     }
     cdm["stats"] = table_stats
 
     logger.info(
-        "omop built cdm: measurement=%d observation=%d unmapped=%d",
+        "omop built cdm: measurement=%d observation=%d custom_concepts=%d unmapped=%d",
         table_stats["measurement_count"],
         table_stats["observation_count"],
+        table_stats["concept_count"],
         table_stats["unmapped_count"],
     )
     return events, {"omop": cdm}

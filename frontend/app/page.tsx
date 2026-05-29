@@ -14,6 +14,7 @@ import {
   listConfigs,
   matchConfigs,
   transform,
+  updateConfig,
   type ConfigMatch,
   type Descriptor,
   type TransformFormat,
@@ -283,14 +284,26 @@ export default function Page() {
     [config],
   );
 
-  // Apply an LLM-patched YAML back to the editor: parse, replace the current
-  // config entry, and stay on the results tab so the user can re-run.
-  const applyPatchedYaml = (next: string) => {
+  // Apply an LLM-patched YAML back to the editor AND persist it to the backend
+  // config store, so the fix survives re-runs and reloads — not just the
+  // in-memory session. Sample/bundled configs have no backend file, so those
+  // are updated locally only.
+  const applyPatchedYaml = async (next: string) => {
+    let parsed: AdapterConfig;
     try {
-      const parsed = parseAdapterYaml(next);
-      setConfigMap((m) => ({ ...m, [configKey]: parsed }));
+      parsed = parseAdapterYaml(next);
     } catch (e) {
       setRunError(`Patched YAML failed to parse: ${(e as Error).message}`);
+      return;
+    }
+    setConfigMap((m) => ({ ...m, [configKey]: parsed }));
+    setRunError(null);
+    if (!backendIds.includes(configKey)) return;
+    try {
+      await updateConfig(configKey, dumpAdapterYaml(parsed));
+    } catch (e) {
+      setRunError(`Applied to the editor, but saving to the backend failed: ${(e as Error).message}`);
+      throw e;
     }
   };
 

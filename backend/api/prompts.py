@@ -60,6 +60,7 @@ Match-block rigidity (MANDATORY):
   3. Assert `type: "object"` on every intermediate container your emit paths walk through before reaching a leaf.
   4. Pin any discriminator field (e.g. `dataType`, `measurementType`, `recordKind`) with `equals` or `in` to the exact value(s) this config is designed for. If the same source emits multiple record kinds, use `in: [...]` enumerating only the kinds this config handles.
 - A match block that would accept a garbage record is a bug. Prefer overly strict criteria; false positives produce unusable events, false negatives are surfaced as "no config matches" in the UI so the user can widen them.
+- Also important: the input data MUST be matched by the match block. Even if the input data does not entirely adhere to the 'descriptor' block; the input data is leading.
 
 Value-spec forms (use anywhere a value is needed):
 - literal: `"foo"`, `42`, `null`

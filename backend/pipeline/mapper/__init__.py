@@ -193,6 +193,8 @@ def _apply_to_event(
         event.mapping.standard_system = code_m.get("system")
         event.mapping.standard_display = code_m.get("display")
         event.mapping.method = code_m.get("method", MappingMethod.MANUAL.value)
+        event.mapping.concept_id = code_m.get("concept_id")
+        event.mapping.standard_concept = code_m.get("standard_concept")
         bound = True
 
     # Unit/component/category go into the private extension bag.

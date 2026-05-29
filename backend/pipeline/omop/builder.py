@@ -16,6 +16,7 @@ from domain.models import CanonicalEvent, EventType, Modality
 from .config import OmopConfig
 from .resolver import _EMPTY_RESOLUTION, batch_resolve
 from .tables import (
+    OmopConcept,
     OmopDeviceExposure,
     OmopMeasurement,
     OmopObservation,
@@ -153,19 +154,24 @@ def _collect_unique_codings(events: list[CanonicalEvent]) -> list[dict[str, str]
                 codings.append({"system": key[0], "code": key[1]})
 
         cc = _concept_codings(event)
-        for slot_key in ("unit", "component"):
-            val = cc.get(slot_key)
-            if not val:
+        # unit is a single coding dict; component is a name->coding dict.
+        candidates: list[Any] = []
+        unit_val = cc.get("unit")
+        if isinstance(unit_val, dict):
+            candidates.append(unit_val)
+        comp_val = cc.get("component")
+        if isinstance(comp_val, dict):
+            candidates.extend(comp_val.values())
+        elif isinstance(comp_val, list):
+            candidates.extend(comp_val)
+        for item in candidates:
+            if not isinstance(item, dict):
                 continue
-            items = val if isinstance(val, list) else [val]
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                sys = item.get("system", "")
-                code = item.get("code", "")
-                if sys and code and (sys, code) not in seen:
-                    seen.add((sys, code))
-                    codings.append({"system": sys, "code": code})
+            sys = item.get("system", "")
+            code = item.get("code", "")
+            if sys and code and (sys, code) not in seen:
+                seen.add((sys, code))
+                codings.append({"system": sys, "code": code})
 
     return codings
 
@@ -195,6 +201,86 @@ def _fallback_table(event: CanonicalEvent) -> str:
     return "observation"
 
 
+_CUSTOM_BASE = 2_000_000_000
+_CUSTOM_SPAN = 100_000_000
+
+
+def _custom_concept_id(system: str, code: str) -> int:
+    """Deterministic OMOP custom concept_id (> 2,000,000,000) for a source code.
+
+    Per OHDSI custom-concept guidance, source codes that don't map to a standard
+    OMOP concept get an id in the 2-billion range.  Hash-based so the same
+    (system, code) yields the same id across stateless requests; stays under the
+    4-byte INTEGER ceiling (~2.147B).
+    """
+    digest = hashlib.sha256(f"{system}|{code}".encode("utf-8")).digest()
+    return _CUSTOM_BASE + (int.from_bytes(digest[:4], "big") % _CUSTOM_SPAN) + 1
+
+
+def _custom_vocab(source: str | None) -> str:
+    """Source-specific vocabulary_id for custom concepts (OHDSI: add custom
+    concepts to a new vocabulary specifically for your source)."""
+    s = (source or "").strip()
+    return f"Custom:{s}" if s else "Custom"
+
+
+def _pick_concepts(
+    res: dict[str, Any],
+    *,
+    system: str | None,
+    code: str | None,
+    picked_concept_id: int | None,
+    picked_standard: str | None,
+    display: str | None,
+    domain_id: str,
+    source: str | None,
+    custom_by_key: dict[tuple[str, str], int],
+    custom_rows: dict[int, OmopConcept],
+    emit_concept: bool,
+) -> tuple[int, int, str]:
+    """Resolve one bound code into (standard_concept_id, source_concept_id, type).
+
+    Precedence (see plan): the user-picked concept_id wins over re-resolution.
+    Custom concepts (> 2B) live only in source_concept_id; concept_id stays 0
+    when there is no standard mapping (OHDSI custom-concept rule).
+    """
+    res_standard = res.get("standard_concept", {}).get("concept_id", 0) or 0
+    res_source = res.get("source_concept", {}).get("concept_id", 0) or 0
+    res_type = res.get("mapping_type", "unmapped")
+
+    picked = int(picked_concept_id) if picked_concept_id else 0
+    is_std = picked_standard == "S"
+
+    standard_id = res_standard or (picked if is_std else 0)
+    source_id = picked or res_source
+
+    if standard_id:
+        mtype = res_type if res_type in ("direct", "mapped", "semantic_match") else "direct"
+        return standard_id, source_id, mtype
+    if source_id:
+        # Real OMOP source concept but no standard target → concept_id stays 0.
+        return 0, source_id, "source_only"
+
+    # No OMOP concept at all → mint a custom (2-billion) concept, if a code exists.
+    if system and code:
+        key = (system, code)
+        cid = custom_by_key.get(key)
+        if cid is None:
+            cid = _custom_concept_id(system, code)
+            custom_by_key[key] = cid
+            if emit_concept:
+                custom_rows.setdefault(cid, OmopConcept(
+                    concept_id=cid,
+                    concept_name=(display or code),
+                    domain_id=domain_id,
+                    vocabulary_id=_custom_vocab(source),
+                    concept_code=code,
+                ))
+        return 0, cid, "custom"
+
+    return 0, 0, "unmapped"
+
+
 def build_cdm(
     events: list[CanonicalEvent],
     *,
@@ -221,11 +307,6 @@ def build_cdm(
             k, v.get("standard_concept", {}).get("concept_id"), v.get("mapping_type"), v.get("target_table"),
         )
 
-    resolution_summary: dict[str, int] = {"direct": 0, "mapped": 0, "semantic_match": 0, "unmapped": 0}
-    for res in cache.values():
-        mt = res.get("mapping_type", "unmapped")
-        resolution_summary[mt] = resolution_summary.get(mt, 0) + 1
-
     persons: dict[int, OmopPerson] = {}
     measurements: list[dict[str, Any]] = []
     observations: list[dict[str, Any]] = []
@@ -233,11 +314,21 @@ def build_cdm(
     periods: dict[int, dict[str, str]] = {}
     unmapped: list[dict[str, Any]] = []
 
+    # Custom ("2-billionaire") concepts minted for codes with no OMOP mapping.
+    custom_by_key: dict[tuple[str, str], int] = {}
+    custom_rows: dict[int, OmopConcept] = {}
+    # Final per-code outcome (standard/source_only/custom/unmapped) for the
+    # response summary — keyed by the unique clinical (system, code) bound.
+    coding_outcomes: dict[tuple[str, str], str] = {}
+
     row_id = 0
     component_rows = 0
     device_id = 0
 
     include = set(config.include)
+    # The CONCEPT vocabulary table is always recorded — custom concepts must be
+    # defined wherever their 2B ids appear in *_source_concept_id.
+    include_concept = True
 
     for event in events:
         if event.quality and event.quality.plausibility == "exclude":
@@ -254,15 +345,27 @@ def build_cdm(
 
         ts_date = _extract_date(event.timestamp)
 
-        code_resolution = _resolve_coding(
-            cache,
-            event.mapping.standard_system if event.mapping else None,
-            event.mapping.standard_code if event.mapping else None,
-        )
-        standard_concept_id = code_resolution.get("standard_concept", {}).get("concept_id", 0) or 0
-        source_concept_id = code_resolution.get("source_concept", {}).get("concept_id", 0) or 0
+        code_system = event.mapping.standard_system if event.mapping else None
+        code_code = event.mapping.standard_code if event.mapping else None
+        code_resolution = _resolve_coding(cache, code_system, code_code)
         target_table = code_resolution.get("target_table", "") or _fallback_table(event)
-        mapping_type = code_resolution.get("mapping_type", "unmapped")
+        domain_id = "Measurement" if target_table == "measurement" else "Observation"
+        standard_concept_id, source_concept_id, mapping_type = _pick_concepts(
+            code_resolution,
+            system=code_system,
+            code=code_code,
+            picked_concept_id=event.mapping.concept_id if event.mapping else None,
+            picked_standard=event.mapping.standard_concept if event.mapping else None,
+            display=event.mapping.standard_display if event.mapping else None,
+            domain_id=domain_id,
+            source=event.context.source,
+            custom_by_key=custom_by_key,
+            custom_rows=custom_rows,
+            emit_concept=include_concept,
+        )
+        if code_system and code_code:
+            coding_outcomes[(code_system, code_code)] = mapping_type
+        code_source_value = code_code or event.category
 
         cc = _concept_codings(event)
         unit_coding = cc.get("unit")
@@ -292,25 +395,37 @@ def build_cdm(
                 value_as_number=event.payload.value if isinstance(event.payload.value, (int, float)) else None,
                 unit_concept_id=unit_concept_id,
                 unit_source_value=event.payload.unit,
-                measurement_source_value=event.category,
+                measurement_source_value=code_source_value,
                 measurement_source_concept_id=source_concept_id,
             )
             measurements.append(m.to_dict())
 
             if event.payload.components:
-                comp_codings_list = cc.get("component", [])
-                if not isinstance(comp_codings_list, list):
-                    comp_codings_list = [comp_codings_list] if comp_codings_list else []
+                comp_map = cc.get("component", {})
+                if not isinstance(comp_map, dict):
+                    comp_map = {}
 
-                for idx, comp in enumerate(event.payload.components):
-                    comp_coding = comp_codings_list[idx] if idx < len(comp_codings_list) else None
-                    comp_res = _resolve_coding(
-                        cache,
-                        comp_coding.get("system") if isinstance(comp_coding, dict) else None,
-                        comp_coding.get("code") if isinstance(comp_coding, dict) else None,
+                for comp in event.payload.components:
+                    comp_coding = comp_map.get(comp.name)
+                    is_coding = isinstance(comp_coding, dict)
+                    comp_sys = comp_coding.get("system") if is_coding else None
+                    comp_code = comp_coding.get("code") if is_coding else None
+                    comp_res = _resolve_coding(cache, comp_sys, comp_code)
+                    comp_standard_id, comp_source_id, comp_type = _pick_concepts(
+                        comp_res,
+                        system=comp_sys,
+                        code=comp_code,
+                        picked_concept_id=comp_coding.get("concept_id") if is_coding else None,
+                        picked_standard=comp_coding.get("standard_concept") if is_coding else None,
+                        display=comp_coding.get("display") if is_coding else comp.name,
+                        domain_id="Measurement",
+                        source=event.context.source,
+                        custom_by_key=custom_by_key,
+                        custom_rows=custom_rows,
+                        emit_concept=include_concept,
                     )
-                    comp_standard_id = comp_res.get("standard_concept", {}).get("concept_id", 0) or 0
-                    comp_source_id = comp_res.get("source_concept", {}).get("concept_id", 0) or 0
+                    if comp_sys and comp_code:
+                        coding_outcomes[(comp_sys, comp_code)] = comp_type
 
                     comp_unit_id = 0
                     if comp.unit:
@@ -329,7 +444,7 @@ def build_cdm(
                         value_as_number=comp.value if isinstance(comp.value, (int, float)) else None,
                         unit_concept_id=comp_unit_id,
                         unit_source_value=comp.unit,
-                        measurement_source_value=f"{event.category}.{comp.name}",
+                        measurement_source_value=comp_code or f"{event.category}.{comp.name}",
                         measurement_source_concept_id=comp_source_id,
                     )
                     measurements.append(cm.to_dict())
@@ -350,23 +465,24 @@ def build_cdm(
                 value_as_string=val_str,
                 unit_concept_id=unit_concept_id,
                 unit_source_value=event.payload.unit,
-                observation_source_value=event.category,
+                observation_source_value=code_source_value,
                 observation_source_concept_id=source_concept_id,
             )
             observations.append(o.to_dict())
 
-        # Track unmapped codings for the audit trail (informational only —
-        # the event is still in the clinical table with concept_id=0).
-        if standard_concept_id == 0 and mapping_type == "unmapped" and emitted:
+        # Track truly-unmapped events for the audit trail (no standard AND no
+        # source/custom concept — informational only; the row is still emitted
+        # with concept_id=0). Rows with a custom 2B source concept are not here.
+        if emitted and standard_concept_id == 0 and source_concept_id == 0:
             unmapped.append({
                 "event_id": event.event_id,
                 "category": event.category,
                 "coding": {
-                    "system": event.mapping.standard_system if event.mapping else None,
-                    "code": event.mapping.standard_code if event.mapping else None,
+                    "system": code_system,
+                    "code": code_code,
                 },
                 "mapping_type": mapping_type,
-                "reason": "No standard concept found — emitted with concept_id=0",
+                "reason": "No concept found — emitted with concept_id=0",
             })
 
         if emitted:
@@ -408,17 +524,28 @@ def build_cdm(
                 ).to_dict()
             )
 
+    # Per-code outcome summary, derived from the actual binding decisions
+    # (standard / source_only / custom / unmapped) over unique clinical codes.
+    resolution_summary: dict[str, int] = {
+        "direct": 0, "mapped": 0, "semantic_match": 0,
+        "source_only": 0, "custom": 0, "unmapped": 0,
+    }
+    for mt in coding_outcomes.values():
+        resolution_summary[mt] = resolution_summary.get(mt, 0) + 1
+    total_codings = len(coding_outcomes)
+
     return {
         "person": [p.to_dict() for p in persons.values()],
         "measurement": measurements,
         "observation": observations,
         "device_exposure": [d.to_dict() for d in devices.values()],
         "observation_period": obs_periods,
+        "concept": [c.to_dict() for c in custom_rows.values()],
         "unmapped": unmapped,
         "resolution_stats": {
-            "total_codings": len(unique_codings),
-            "resolved": sum(v for k, v in resolution_summary.items() if k != "unmapped"),
-            "failed": resolution_summary.get("unmapped", 0),
+            "total_codings": total_codings,
+            "resolved": total_codings - resolution_summary["unmapped"],
+            "failed": resolution_summary["unmapped"],
             "mapping_types": resolution_summary,
         },
         "_component_rows": component_rows,

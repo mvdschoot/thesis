@@ -236,6 +236,9 @@ export interface OmopCdmOutput {
   observation: Record<string, unknown>[];
   device_exposure: Record<string, unknown>[];
   observation_period: Record<string, unknown>[];
+  // Custom ("2-billionaire") CONCEPT rows for source codes with no standard
+  // OMOP mapping. Referenced from *_source_concept_id on the clinical rows.
+  concept: Record<string, unknown>[];
   unmapped: Record<string, unknown>[];
   resolution_stats: {
     total_codings: number;
@@ -249,6 +252,7 @@ export interface OmopCdmOutput {
     observation_count: number;
     device_exposure_count: number;
     observation_period_count: number;
+    concept_count: number;
     unmapped_count: number;
     component_rows: number;
   };

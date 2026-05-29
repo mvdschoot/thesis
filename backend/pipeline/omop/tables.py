@@ -88,3 +88,25 @@ class OmopObservationPeriod:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class OmopConcept:
+    """A custom ("2-billionaire") CONCEPT row for a source code with no
+    standard OMOP mapping.  Per OHDSI guidance custom concepts use
+    concept_id > 2,000,000,000, are always non-standard, and are referenced
+    only from ``*_source_concept_id`` columns.
+    """
+    concept_id: int
+    concept_name: str
+    domain_id: str
+    vocabulary_id: str
+    concept_code: str
+    concept_class_id: str = "Undefined"
+    standard_concept: str | None = None
+    valid_start_date: str = "1970-01-01"
+    valid_end_date: str = "2099-12-31"
+    invalid_reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

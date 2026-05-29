@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { cx } from "@/lib/cx";
 import type { OmopCdmOutput } from "@/lib/types";
 
-type OmopTable = "measurement" | "observation" | "person" | "device_exposure" | "observation_period";
+type OmopTable = "measurement" | "observation" | "person" | "device_exposure" | "observation_period" | "concept";
 
 const TABLE_LABELS: Record<OmopTable, string> = {
   measurement: "measurement",
@@ -13,6 +13,7 @@ const TABLE_LABELS: Record<OmopTable, string> = {
   person: "person",
   device_exposure: "device_exposure",
   observation_period: "observation_period",
+  concept: "concept (custom)",
 };
 
 interface Props {
@@ -78,6 +79,7 @@ export default function OmopCdmPanel({ cdm }: Props) {
       person: cdm.person?.length ?? 0,
       device_exposure: cdm.device_exposure?.length ?? 0,
       observation_period: cdm.observation_period?.length ?? 0,
+      concept: cdm.concept?.length ?? 0,
     };
   }, [cdm]);
 

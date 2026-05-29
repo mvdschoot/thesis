@@ -9,12 +9,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# "concept" is accepted as a valid name (so a config may list it without a
+# validation error), but the CONCEPT vocabulary table is always emitted
+# alongside the clinical tables — it defines the custom (2B) concepts the
+# clinical rows reference, so it is not gated like an optional clinical table.
 TABLE_KINDS: tuple[str, ...] = (
     "person",
     "measurement",
     "observation",
     "device_exposure",
     "observation_period",
+    "concept",
 )
 DEFAULT_INCLUDE: tuple[str, ...] = (
     "person",

@@ -1,27 +1,27 @@
 adapter:
   id: "mhealth-app-usage-daily-v1"
   version: "1.0.0"
-  description: "mHealth app daily usage and engagement events (exercises, recipes, education, assessments, gamification)."
+  description: "mHealth app daily usage and engagement events from aggregated per-day metrics."
 
 match:
   source: "mhealth"
   record:
     - { field: "userId", exists: true }
     - { field: "date", exists: true }
-    - { field: "dataType", exists: true, equals: "app-usage-daily" }
+    - { field: "dataType", equals: "app-usage-daily" }
     - { field: "timestamp", exists: true }
     - { field: "metrics", type: "object" }
     - { field: "metrics.exercises", type: "object" }
-    - { field: "metrics.exercises.completed", type: "array" }
     - { field: "metrics.recipes", type: "object" }
-    - { field: "metrics.recipes.favorited", type: "array" }
     - { field: "metrics.education", type: "object" }
-    - { field: "metrics.education.lessonsStarted", type: "array" }
-    - { field: "metrics.education.lessonsCompleted", type: "array" }
     - { field: "metrics.assessments", type: "object" }
-    - { field: "metrics.assessments.profileQuestionsAnswered", type: "array" }
     - { field: "metrics.gamification", type: "object" }
-    - { field: "metrics.gamification.badgesEarned", type: "array" }
+    - { field: "metrics.exercises.completed", type: "array", non_empty: true }
+    - { field: "metrics.recipes.favorited", type: "array", non_empty: true }
+    - { field: "metrics.education.lessonsStarted", type: "array", non_empty: true }
+    - { field: "metrics.education.lessonsCompleted", type: "array", non_empty: true }
+    - { field: "metrics.assessments.profileQuestionsAnswered", type: "array", non_empty: true }
+    - { field: "metrics.gamification.badgesEarned", type: "array", non_empty: true }
 
 defaults:
   subject_id: { path: "userId" }
@@ -29,10 +29,10 @@ defaults:
     source: "mhealth"
     modality: "app"
     device: null
-    source_measurement_type: "app-usage-daily"
+    source_measurement_type: { path: "dataType" }
   stage: "structured"
   source_record_id:
-    template: "mhealth:{userId}:{date}:{dataType}"
+    template: "mhealth:{userId}:{dataType}:{date}:{timestamp}"
 
 emit:
   - id: "exercise-completed"
@@ -44,24 +44,13 @@ emit:
     timestamp:
       start: { path: "@item.completedAt", transform: "iso_millis" }
     payload:
-      value: { path: "@item.exerciseId" }
+      value: true
       raw_value: { path: "@item.exerciseId" }
-      label: "exerciseId"
-      components:
-        - name: "week"
-          value: { path: "@item.week" }
-        - name: "day"
-          value: { path: "@item.day" }
+      label: "exercise completed"
     extensions:
       mhealth.exerciseId: { path: "@item.exerciseId" }
       mhealth.week: { path: "@item.week" }
       mhealth.day: { path: "@item.day" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
 
   - id: "recipe-favorited"
     description: "One event per favorited recipe."
@@ -70,19 +59,16 @@ emit:
     granularity: "instant"
     iterate: "metrics.recipes.favorited"
     timestamp:
-      start: { path: "@item.timestamp", fallback: { path: "timestamp", transform: "iso_millis" } }
+      start:
+        fallback:
+          path: "@item.timestamp"
+          fallback: { path: "timestamp", transform: "iso_millis" }
     payload:
-      value: { path: "@item.recipeId" }
+      value: true
       raw_value: { path: "@item.recipeId" }
-      label: "recipeId"
+      label: "recipe favorited"
     extensions:
       mhealth.recipeId: { path: "@item.recipeId" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
 
   - id: "lesson-started"
     description: "One event per started lesson."
@@ -93,17 +79,11 @@ emit:
     timestamp:
       start: { path: "@item.startedAt", transform: "iso_millis" }
     payload:
-      value: { path: "@item.lessonId" }
+      value: true
       raw_value: { path: "@item.lessonId" }
-      label: "lessonId"
+      label: "lesson started"
     extensions:
       mhealth.lessonId: { path: "@item.lessonId" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
 
   - id: "lesson-completed"
     description: "One event per completed lesson."
@@ -114,17 +94,11 @@ emit:
     timestamp:
       start: { path: "@item.completedAt", transform: "iso_millis" }
     payload:
-      value: { path: "@item.lessonId" }
+      value: true
       raw_value: { path: "@item.lessonId" }
-      label: "lessonId"
+      label: "lesson completed"
     extensions:
       mhealth.lessonId: { path: "@item.lessonId" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
 
   - id: "profile-question-answered"
     description: "One event per answered profile question."
@@ -133,23 +107,20 @@ emit:
     granularity: "instant"
     iterate: "metrics.assessments.profileQuestionsAnswered"
     timestamp:
-      start: { path: "@item.answeredAt", fallback: { path: "timestamp", transform: "iso_millis" } }
+      start:
+        fallback:
+          path: "@item.answeredAt"
+          fallback: { path: "timestamp", transform: "iso_millis" }
     payload:
-      value: { path: "@item.questionId" }
+      value: true
       raw_value: { path: "@item.questionId" }
-      label: "questionId"
-      components:
-        - name: "questionCategoryId"
-          value: { path: "@item.questionCategoryId" }
+      label: "profile question answered"
     extensions:
       mhealth.questionId: { path: "@item.questionId" }
-      mhealth.questionCategoryId: { path: "@item.questionCategoryId" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
+      mhealth.questionCategoryId:
+        fallback:
+          path: "@item.questionCategoryId"
+          fallback: null
 
   - id: "badge-earned"
     description: "One event per earned badge."
@@ -158,19 +129,13 @@ emit:
     granularity: "instant"
     iterate: "metrics.gamification.badgesEarned"
     timestamp:
-      start: { path: "@item.unlockedAt", fallback: { path: "timestamp", transform: "iso_millis" } }
+      start: { path: "@item.unlockedAt", transform: "iso_millis" }
     payload:
-      value: { path: "@item.badgeId" }
+      value: true
       raw_value: { path: "@item.badgeId" }
-      label: "badgeId"
+      label: "badge earned"
     extensions:
       mhealth.badgeId: { path: "@item.badgeId" }
-    quality:
-      flags:
-        - code: "APP_USAGE_DAILY"
-          severity: "info"
-          stage: "structured"
-          message: "Derived from daily app usage metrics."
 
 clean:
   heuristics:
@@ -179,21 +144,19 @@ clean:
     - type_coercer
 
 validate:
-  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
-  timestamp_window: { min: "2020-01-01", max: "now+1d" }
+  enabled: [required_fields, timestamp_window, payload_shape]
+  timestamp_window: { min: "2000-01-01", max: "now+1d" }
 
 qualify:
-  enabled: [completeness, duplicates, outliers, conformance, plausibility]
-  duplicates:
-    fields: [subject_id, category, timestamp, payload.value]
-    value_round_digits: 3
+  enabled: [completeness, duplicates, plausibility]
+  duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
   plausibility: { warning_count_for_review: 1 }
 
 fhir:
   enabled: true
   bundle_type: transaction
-  include: [Patient, Observation, Provenance]
+  include: [Patient, Observation, Questionnaire]
 
 omop:
   enabled: true
-  include: [person, observation, observation_period]
+  include: [person, measurement, observation, device_exposure, observation_period]

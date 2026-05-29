@@ -14,7 +14,7 @@ interface Props {
   diagnostics: AdapterDiagnostics | null | undefined;
   yamlText: string;
   sampleRecord: unknown;
-  onApplyYaml: (yaml: string) => void;
+  onApplyYaml: (yaml: string) => void | Promise<void>;
 }
 
 const SKIP_CODE_LABELS: Record<string, string> = {
@@ -105,6 +105,8 @@ export default function DebugPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggested, setSuggested] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   // Send the first record that triggered any skip — most actionable for the LLM.
   // Falls back to the whole input when we can't slice it (CSV string, non-array JSON).
@@ -125,6 +127,7 @@ export default function DebugPanel({
     setBusy(true);
     setError(null);
     setSuggested(null);
+    setApplied(false);
     try {
       const res = await suggestConfigFix({
         yaml: yamlText,
@@ -136,6 +139,19 @@ export default function DebugPanel({
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleApply() {
+    if (!suggested) return;
+    setApplying(true);
+    try {
+      await onApplyYaml(suggested);
+      setApplied(true);
+    } catch {
+      // The parent surfaces the failure message; keep the card open for retry.
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -204,17 +220,27 @@ export default function DebugPanel({
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card-head">
             <span className="eyebrow">Suggested YAML</span>
+            {applied && (
+              <span className="chip ok" style={{ marginLeft: 8 }}>
+                applied &amp; saved to backend
+              </span>
+            )}
             <button
               className="btn primary"
               style={{ marginLeft: "auto" }}
-              onClick={() => onApplyYaml(suggested)}
+              onClick={handleApply}
+              disabled={applying}
+              title="Apply the patched YAML to the editor and save it to the backend config store."
             >
-              Apply to editor
+              {applying ? "Saving…" : applied ? "Apply & save again" : "Apply & save"}
             </button>
             <button
               className="btn"
               style={{ marginLeft: 8 }}
-              onClick={() => setSuggested(null)}
+              onClick={() => {
+                setSuggested(null);
+                setApplied(false);
+              }}
             >
               Discard
             </button>

@@ -165,6 +165,11 @@ class Mapping:
     standard_display: str | None = None
     confidence: float | None = None
     method: str | None = None
+    # OMOP concept_id of the bound code (from OMOPHub search), and its
+    # standard_concept flag ("S" standard, "C" classification, None non-standard).
+    # The OMOP builder prefers these over re-resolving the code via the API.
+    concept_id: int | None = None
+    standard_concept: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -173,6 +178,8 @@ class Mapping:
             "standard_display": self.standard_display,
             "confidence": self.confidence,
             "method": self.method,
+            "concept_id": self.concept_id,
+            "standard_concept": self.standard_concept,
         }
 
 

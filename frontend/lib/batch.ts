@@ -256,11 +256,13 @@ function mergeOmop(responses: TransformResponse[]): OmopCdmOutput | null {
   if (outputs.length === 1) return outputs[0];
 
   const personSeen = new Set<unknown>();
+  const conceptSeen = new Set<unknown>();
   const person: Record<string, unknown>[] = [];
   const measurement: Record<string, unknown>[] = [];
   const observation: Record<string, unknown>[] = [];
   const device_exposure: Record<string, unknown>[] = [];
   const observation_period: Record<string, unknown>[] = [];
+  const concept: Record<string, unknown>[] = [];
   const unmapped: Record<string, unknown>[] = [];
 
   const resolution_stats = { total_codings: 0, resolved: 0, failed: 0, mapping_types: {} as Record<string, number> };
@@ -271,6 +273,12 @@ function mergeOmop(responses: TransformResponse[]): OmopCdmOutput | null {
       if (personSeen.has(pid)) continue;
       personSeen.add(pid);
       person.push(p);
+    }
+    for (const c of o.concept ?? []) {
+      const cid = c.concept_id;
+      if (conceptSeen.has(cid)) continue;
+      conceptSeen.add(cid);
+      concept.push(c);
     }
     measurement.push(...o.measurement);
     observation.push(...o.observation);
@@ -300,6 +308,7 @@ function mergeOmop(responses: TransformResponse[]): OmopCdmOutput | null {
     observation,
     device_exposure,
     observation_period,
+    concept,
     unmapped,
     resolution_stats,
     stats: {
@@ -308,6 +317,7 @@ function mergeOmop(responses: TransformResponse[]): OmopCdmOutput | null {
       observation_count: observation.length,
       device_exposure_count: device_exposure.length,
       observation_period_count: observation_period.length,
+      concept_count: concept.length,
       unmapped_count: unmapped.length,
       component_rows: outputs.reduce((s, o) => s + o.stats.component_rows, 0),
     },

@@ -30,7 +30,7 @@ interface Props {
   adapterDiagnostics?: AdapterDiagnostics | null;
   yamlText: string;
   inputData: unknown;
-  onApplyYaml: (yaml: string) => void;
+  onApplyYaml: (yaml: string) => void | Promise<void>;
   scanPhase?: boolean;
 }
 
