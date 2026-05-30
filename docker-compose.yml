@@ -15,7 +15,41 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        NEXT_PUBLIC_FHIR_BASE_URL: http://localhost:8080/fhir
     ports:
       - "3000:3000"
     depends_on:
       - api
+
+  hapi-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hapi
+      POSTGRES_USER: hapi
+      POSTGRES_PASSWORD: hapi
+    volumes:
+      - hapi-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hapi-fhir:
+    image: hapiproject/hapi:v8.4.0-2
+    ports:
+      - "8080:8080"
+    depends_on:
+      hapi-db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://hapi-db:5432/hapi
+      SPRING_DATASOURCE_USERNAME: hapi
+      SPRING_DATASOURCE_PASSWORD: hapi
+      SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      # HAPI starter enables CORS with allowed_origin '*' by default, so the
+      # browser can talk to this server directly without a backend proxy.
+
+volumes:
+  hapi-pgdata:

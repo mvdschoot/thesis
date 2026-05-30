@@ -32,6 +32,7 @@ interface Props {
   inputData: unknown;
   onApplyYaml: (yaml: string) => void | Promise<void>;
   scanPhase?: boolean;
+  onOpenServer?: () => void;
 }
 
 type View = "events" | "concepts" | "fhir" | "omop" | "debug";
@@ -54,6 +55,7 @@ export default function ResultsPanel({
   inputData,
   onApplyYaml,
   scanPhase,
+  onOpenServer,
 }: Props) {
   const [view, setView] = useState<View>("events");
   const prevScanPhase = useRef(scanPhase);
@@ -216,7 +218,7 @@ export default function ResultsPanel({
         />
       )}
 
-      {view === "fhir" && <FhirBundlePanel bundle={bundle} />}
+      {view === "fhir" && <FhirBundlePanel bundle={bundle} onOpenServer={onOpenServer} />}
 
       {view === "omop" && <OmopCdmPanel cdm={omopCdm} />}
 

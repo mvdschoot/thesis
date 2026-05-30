@@ -45,7 +45,7 @@ impl/
     app/          single-page route
     components/   ConnectorPanel, AdapterPanel, ResultsPanel (events, FHIR, OMOP, concepts, debug), navigation
   sample_data/    fixtures (mHealth, Fitabase CSVs, clinical pilots, serious games, VR, questionnaires)
-  docker-compose.yml      one service: `api`
+  docker-compose.yml      services: `api`, `frontend`, `hapi-fhir`, `hapi-db`
 ```
 
 Pipeline flow (one HTTP request through `/api/transform`):
@@ -94,7 +94,7 @@ pip install -e .
 uvicorn api.main:app --reload --port 8000
 ```
 
-Or in a container: `docker compose up -d` (one service, `harmonia-api`, on :8000).
+Or in a container: `docker compose up -d` brings up four services — the FastAPI `api` (:8000), the Next.js `frontend` (:3000), a persistent HAPI FHIR R4 server `hapi-fhir` (:8080, Postgres-backed via `hapi-db` + the `hapi-pgdata` volume). The frontend talks to HAPI **directly** from the browser (export bundles + a "FHIR Server" dashboard) — the backend is not involved in any FHIR-server traffic. The HAPI base URL is baked into the frontend at build time via `NEXT_PUBLIC_FHIR_BASE_URL` (default `http://localhost:8080/fhir`).
 
 For debugging in VS Code, F5 launches the "Debug API" config (defined in `.vscode/launch.json`) — same uvicorn invocation under debugpy. Set a breakpoint anywhere in `pipeline/` and it will hit on the next `/api/transform`.
 

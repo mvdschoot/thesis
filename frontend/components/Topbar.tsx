@@ -1,5 +1,6 @@
 "use client";
 
+import { cx } from "@/lib/cx";
 import type { BatchProgress } from "@/lib/batch";
 
 interface Props {
@@ -14,6 +15,9 @@ interface Props {
   batchProgress?: BatchProgress | null;
   onCancel?: () => void;
   scanPhase?: boolean;
+  /** Toggle the top-level FHIR Server dashboard. */
+  onOpenFhirServer?: () => void;
+  fhirServerActive?: boolean;
 }
 
 export default function Topbar({
@@ -27,6 +31,8 @@ export default function Topbar({
   batchProgress,
   onCancel,
   scanPhase,
+  onOpenFhirServer,
+  fhirServerActive,
 }: Props) {
   const isBatched = batchProgress != null && batchProgress.batchCount > 1;
   return (
@@ -65,6 +71,17 @@ export default function Topbar({
       </div>
 
       <div className="chip mono">POST /api/transform</div>
+
+      {onOpenFhirServer && (
+        <button
+          className={cx("btn", fhirServerActive && "primary")}
+          onClick={onOpenFhirServer}
+          style={{ marginLeft: 10 }}
+          title="Browse the connected HAPI FHIR server"
+        >
+          {fhirServerActive ? "← Back to pipeline" : "FHIR Server"}
+        </button>
+      )}
 
       {isBatched && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 8 }}>

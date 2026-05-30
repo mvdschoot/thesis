@@ -35,13 +35,17 @@ Requirements: Docker and Docker Compose.
 # 1. Create backend/.env with your API keys (see "Environment variables" below)
 cp backend/.env.example backend/.env
 
-# 2. Build and start both services
+# 2. Build and start all services (api, frontend, HAPI FHIR server + its Postgres DB)
 docker compose up -d
 
 # 3. Open the app
-#    Frontend: http://localhost:3000
-#    Backend:  http://localhost:8000/api/healthz
+#    Frontend:    http://localhost:3000
+#    Backend:     http://localhost:8000/api/healthz
+#    FHIR server: http://localhost:8080/fhir/metadata
 ```
+
+The HAPI FHIR server persists its data in the `hapi-pgdata` Docker volume, so resources
+survive `docker compose down` / `up`. Use `docker compose down -v` to wipe it.
 
 To rebuild after code changes:
 
@@ -55,10 +59,13 @@ To stop:
 docker compose down
 ```
 
-The frontend container bakes `NEXT_PUBLIC_API_BASE_URL` at build time (defaults to `http://localhost:8000`). Override it for non-local deployments:
+The frontend container bakes `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_FHIR_BASE_URL` at build time (defaults `http://localhost:8000` and `http://localhost:8080/fhir`). The browser calls the HAPI FHIR server directly using the latter — for export and the "FHIR Server" dashboard. Override for non-local deployments:
 
 ```bash
-docker compose build --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com frontend
+docker compose build \
+  --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com \
+  --build-arg NEXT_PUBLIC_FHIR_BASE_URL=https://fhir.example.com/fhir \
+  frontend
 ```
 
 ## Local development (without Docker)
@@ -114,3 +121,4 @@ Backend (`backend/.env`):
 Frontend (`frontend/.env.local`):
 
 - `NEXT_PUBLIC_API_BASE_URL` — defaults to `http://localhost:8000`.
+- `NEXT_PUBLIC_FHIR_BASE_URL` — HAPI FHIR base the browser connects to directly; defaults to `http://localhost:8080/fhir`.

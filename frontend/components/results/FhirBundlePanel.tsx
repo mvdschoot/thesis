@@ -3,11 +3,20 @@
 import { useMemo, useState } from "react";
 
 import { cx } from "@/lib/cx";
+import { exportBundle, FHIR_BASE, type ExportSummary } from "@/lib/fhirServer";
 import type { FhirBundle } from "@/lib/types";
 
 interface Props {
   bundle: FhirBundle | null;
+  /** Open the top-level FHIR Server dashboard (set after a successful export). */
+  onOpenServer?: () => void;
 }
+
+type ExportState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "done"; summary: ExportSummary }
+  | { status: "error"; message: string };
 
 function counts(bundle: FhirBundle): { kind: string; n: number }[] {
   const tally = new Map<string, number>();
@@ -49,8 +58,9 @@ function tallyCoding(bundle: FhirBundle): CodingTally {
 // on-screen preview; Copy / Download still operate on the full bundle.
 const PREVIEW_MAX_ENTRIES = 100;
 
-export default function FhirBundlePanel({ bundle }: Props) {
+export default function FhirBundlePanel({ bundle, onOpenServer }: Props) {
   const [copied, setCopied] = useState(false);
+  const [exp, setExp] = useState<ExportState>({ status: "idle" });
 
   const entryCount = bundle?.entry?.length ?? 0;
   const previewTruncated = entryCount > PREVIEW_MAX_ENTRIES;
@@ -113,6 +123,17 @@ export default function FhirBundlePanel({ bundle }: Props) {
     URL.revokeObjectURL(url);
   }
 
+  async function exportToServer() {
+    if (!bundle) return;
+    setExp({ status: "running" });
+    try {
+      const summary = await exportBundle(bundle);
+      setExp({ status: "done", summary });
+    } catch (e) {
+      setExp({ status: "error", message: (e as Error).message });
+    }
+  }
+
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div className="card-head">
@@ -127,9 +148,57 @@ export default function FhirBundlePanel({ bundle }: Props) {
           <button className="btn" onClick={download} title="Download bundle.json">
             Download
           </button>
+          <button
+            className="btn primary"
+            onClick={exportToServer}
+            disabled={exp.status === "running"}
+            title={`Upsert this bundle into the HAPI FHIR server at ${FHIR_BASE}`}
+          >
+            {exp.status === "running" ? (
+              <>
+                <span className="spin" /> Exporting…
+              </>
+            ) : (
+              <>Export to FHIR server</>
+            )}
+          </button>
         </div>
       </div>
       <div className="card-body">
+        {exp.status === "done" && (
+          <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span className={cx("chip mono", exp.summary.errors.length === 0 ? "ok" : "warn")}>
+              {exp.summary.ok}/{exp.summary.total} resources upserted
+              {exp.summary.errors.length > 0 ? ` · ${exp.summary.errors.length} failed` : " ✓"}
+            </span>
+            {onOpenServer && (
+              <button
+                type="button"
+                onClick={onOpenServer}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--accent, #1f6feb)",
+                  cursor: "pointer",
+                  padding: 0,
+                  textDecoration: "underline",
+                  font: "inherit",
+                }}
+              >
+                Open FHIR Server →
+              </button>
+            )}
+          </div>
+        )}
+        {exp.status === "error" && (
+          <div className="qflag err" style={{ marginBottom: 12 }}>
+            <div className="qf-bar" />
+            <div>
+              <div className="qf-code">FHIR_EXPORT_FAILED</div>
+              <div className="qf-msg">{exp.message}</div>
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
           {chips.map(({ kind, n }) => (
             <span key={kind} className="chip mono">

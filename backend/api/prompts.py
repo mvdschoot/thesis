@@ -64,10 +64,10 @@ Match-block rigidity (MANDATORY):
 
 Value-spec forms (use anywhere a value is needed):
 - literal: `"foo"`, `42`, `null`
-- path: `{ path: "some.nested.key" }` — dot notation, supports `[0]` indexing. Prefix `@item.` inside an iterated rule to reference the current iteration element. Use `{ path: "@record_index" }` to get the 0-based row/record number — useful as a stable subject_id when records have no explicit person identifier (e.g. `{ template: "respondent:{@record_index}" }`).
+- path: `{ path: "some.nested.key" }` — dot notation, supports `[0]` indexing. Prefix `@item.` inside an iterated rule to reference the current iteration element. Prefix `@event.` (or use `@event` alone) inside an iterated rule to reach back up to a field on the whole record/event itself — e.g. while iterating `metrics.recipes.favorited`, use `{ path: "@event.date" }` to stamp each recipe with the parent event's date. Use `{ path: "@record_index" }` to get the 0-based row/record number — useful as a stable subject_id when records have no explicit person identifier (e.g. `{ template: "respondent:{@record_index}" }`).
 - transform: `{ path: "...", transform: "start_of_day" | "end_of_day" | "iso_date" | "iso_millis" | "to_int" | "to_float" }`
 - fallback: `{ path: "...", fallback: <another-spec> }` — the fallback is itself a full value-spec (recursive).
-- template: `{ template: "literal {path.to.field} more {@item.foo}" }` — brace-interpolation.
+- template: `{ template: "literal {path.to.field} more {@item.foo} on {@event.date}" }` — brace-interpolation. Inside an iterated rule, `{@item.x}` references the current element and `{@event.x}` references a field on the whole record/event.
 - composite timestamp: `{ date_from: <spec>, time_from: <spec> }` → produces `YYYY-MM-DDTHH:MM:SS.sssZ`.
 - explicit timestamp parsing: `{ path: "...", parse_timestamp: "<strptime-format>" }` — parses the value with Python's `datetime.strptime` (e.g. `"%m/%d/%Y %I:%M:%S %p"` for `"3/12/2016 2:00:00 AM"`) and emits ISO 8601 in UTC. Naive timestamps are assumed UTC; aware timestamps are converted. Combinable with `template:` to merge separate date and time columns: `{ template: "{ActivityDate} {ActivityTime}", parse_timestamp: "%m/%d/%Y %I:%M:%S %p" }`.
 - arithmetic: `{ multiply: [<spec>, <spec>, ...] }`.
@@ -84,7 +84,7 @@ Rule structure:
 - type: one of "measurement" | "observation" | "survey" | "event" | "summary" | "session".
 - category: a string (often a value-spec resolving the category from `@item`).
 - granularity: "instant" | "interval" | "daily" | "session" | "unknown".
-- iterate: path to a list inside the record — one event per element. `@item` references resolve against that element.
+- iterate: path to a list inside the record — one event per element. `@item` references resolve against that element; `@event` references resolve against the whole record, so you can combine per-element fields (`@item.recipeId`) with event-level fields (`@event.date`, `@event.userId`) in the same rule. (Plain unprefixed paths also resolve against the record, but prefer `@event.` inside iterated rules to make the intent explicit.)
 - iterate_object: expand an object's keys into one event per key.
     - `source` (optional): path to the source dict. Defaults to the root record. Use `"."` or omit for flat CSVs.
     - `entries: [{ key, label }, ...]` — explicit list of keys to iterate.

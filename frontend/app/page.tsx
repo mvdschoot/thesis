@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AdapterPanel from "@/components/adapter/AdapterPanel";
 import ConnectorPanel, { type InputMode } from "@/components/connector/ConnectorPanel";
+import FhirServerPanel from "@/components/fhir/FhirServerPanel";
 import PipelineNav from "@/components/PipelineNav";
 import ResultsPanel from "@/components/results/ResultsPanel";
 import StageRulesPanel from "@/components/StageRulesPanel";
@@ -583,6 +584,17 @@ export default function Page() {
     setActiveStage("adapter");
   };
 
+  // The FHIR Server dashboard is a top-level destination outside the linear
+  // pipeline. Toggling returns to whichever stage the user came from.
+  const lastStageRef = useRef<string>("results");
+  const toggleFhirServer = () => {
+    setActiveStage((cur) => {
+      if (cur === "fhir-server") return lastStageRef.current;
+      lastStageRef.current = cur;
+      return "fhir-server";
+    });
+  };
+
   const configHint = config
     ? `${config.match.source || "—"} · ${config.emit.length} emit rule${
         config.emit.length === 1 ? "" : "s"
@@ -604,6 +616,8 @@ export default function Page() {
         batchProgress={batchProgress}
         onCancel={cancelBatch}
         scanPhase={scanPhase}
+        onOpenFhirServer={toggleFhirServer}
+        fhirServerActive={activeStage === "fhir-server"}
       />
       <StageStrip stages={stageDefs} active={activeStage} onJump={setActiveStage} />
 
@@ -726,10 +740,15 @@ export default function Page() {
             inputData={inputData}
             onApplyYaml={applyPatchedYaml}
             scanPhase={scanPhase}
+            onOpenServer={toggleFhirServer}
           />
         )}
 
-        <PipelineNav activeStage={activeStage} onJump={setActiveStage} />
+        {activeStage === "fhir-server" && <FhirServerPanel />}
+
+        {activeStage !== "fhir-server" && (
+          <PipelineNav activeStage={activeStage} onJump={setActiveStage} />
+        )}
       </div>
     </div>
   );

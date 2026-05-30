@@ -149,6 +149,9 @@ def _resolve_value(
     Handles: literal values, {path}, {path, transform}, {path, fallback},
     {multiply}, {template}, {date_from, time_from}.
     ``@record_index`` resolves to the 0-based row/record number.
+    ``@event`` (or ``@event.sub.path``) resolves against the whole record —
+    useful inside an iterated rule to reach back up to fields on the event
+    itself, alongside the per-element ``@item``.
     """
     if not isinstance(spec, dict):
         return spec
@@ -157,6 +160,11 @@ def _resolve_value(
         path = spec["path"]
         if path == "@record_index":
             value = record_index if record_index is not None else 0
+        elif path == "@event" or path.startswith("@event."):
+            if path == "@event":
+                value = record
+            else:
+                value = _resolve_path(record, path[len("@event."):])
         elif path.startswith("@item"):
             if item is None:
                 return spec.get("fallback")
@@ -201,7 +209,11 @@ def _resolve_value(
             ref = m.group(1)
             if ref == "@record_index":
                 return str(record_index if record_index is not None else 0)
-            if ref.startswith("@item.") and item is not None:
+            if ref == "@event":
+                v = record
+            elif ref.startswith("@event."):
+                v = _resolve_path(record, ref[len("@event."):])
+            elif ref.startswith("@item.") and item is not None:
                 v = _resolve_path(item, ref[len("@item."):])
             else:
                 v = _resolve_path(record, ref)
