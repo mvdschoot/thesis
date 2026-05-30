@@ -270,7 +270,7 @@ export interface Coding {
   standard_concept?: "S" | "C" | null;
 }
 
-export type ConceptSlotKind = "code" | "unit" | "component" | "category";
+export type ConceptSlotKind = "code" | "unit" | "category";
 
 export interface ConceptSlot {
   key: string;

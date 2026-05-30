@@ -336,6 +336,13 @@ class ConfigAdapter(BaseAdapter):
         self._match = self._config["match"]
         self._defaults = self._config.get("defaults", {})
         self._rules = self._config["emit"]
+        # Enforce "a value is never also a component": strip any component whose
+        # value spec matches payload.value, so the canonical event (and its FHIR
+        # Observation) never carries value[x] and a component[] with the same
+        # source. Recorded per rule so it can be surfaced via diagnostics.
+        self._dropped_components: dict[str, list[str]] = {}
+        self._reported_dropped: set[str] = set()
+        self._strip_redundant_components()
         # New optional sibling sections — None when omitted, in which case the
         # corresponding stage falls back to its current default behavior.
         self._clean_block = CleanConfig.from_dict(self._config.get("clean"))
@@ -347,6 +354,38 @@ class ConfigAdapter(BaseAdapter):
     @classmethod
     def from_dict(cls, config: dict[str, Any]) -> "ConfigAdapter":
         return cls(config=config)
+
+    def _strip_redundant_components(self) -> None:
+        """Remove components that merely duplicate `payload.value`.
+
+        A component whose `value` spec is identical to the rule's `payload.value`
+        spec carries no new information — it produces a FHIR Observation with the
+        same data in `value[x]` and `component[]`, and surfaces the same concept
+        twice in the mapper. We drop it at load time and remember the names so the
+        adapter can report the drop via diagnostics.
+        """
+        for rule in self._rules:
+            payload = rule.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            comps = payload.get("components")
+            value_spec = payload.get("value")
+            if not isinstance(comps, list) or value_spec is None:
+                continue
+            kept: list[Any] = []
+            dropped: list[str] = []
+            for c in comps:
+                if isinstance(c, dict) and c.get("value") == value_spec:
+                    dropped.append(str(c.get("name", "<unnamed>")))
+                else:
+                    kept.append(c)
+            if not dropped:
+                continue
+            if kept:
+                payload["components"] = kept
+            else:
+                payload.pop("components", None)
+            self._dropped_components[str(rule.get("id", "<unnamed>"))] = dropped
 
     @property
     def source_type(self) -> str:
@@ -459,6 +498,25 @@ class ConfigAdapter(BaseAdapter):
     ) -> list[CanonicalEvent]:
         events: list[CanonicalEvent] = []
         rule_id = rule.get("id", "<unnamed>")
+
+        # Surface load-time component drops once per rule (see
+        # `_strip_redundant_components`).
+        if (
+            collector is not None
+            and rule_id in self._dropped_components
+            and rule_id not in self._reported_dropped
+        ):
+            self._reported_dropped.add(rule_id)
+            for name in self._dropped_components[rule_id]:
+                collector.record_skip(
+                    code="redundant_component_dropped",
+                    detail=(
+                        f"Rule '{rule_id}': dropped component '{name}' — its value "
+                        "source matches payload.value, and a value must not also be "
+                        "a component."
+                    ),
+                    path=name,
+                )
 
         parent_id = None
         parent_ref = rule.get("parent")

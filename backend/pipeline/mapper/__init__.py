@@ -41,7 +41,7 @@ logger = logging.getLogger("pipeline.mapper")
 class ConceptSlot:
     """A slot of events that share the same coding target."""
     key: str
-    kind: str  # "code" | "unit" | "component" | "category"
+    kind: str  # "code" | "unit" | "category"  (components merge into "code")
     label: str
     count: int
     sample: dict[str, Any]
@@ -81,13 +81,14 @@ def detect_slots(
 ) -> list[ConceptSlot]:
     """Walk events once and emit a deduplicated slot list.
 
-    The order of the result is stable for the UI: code → unit → component →
-    category, with insertion order within each kind.
+    The order of the result is stable for the UI: code → unit → category, with
+    insertion order within each kind. Headline values and components share the
+    `code|` namespace (see :mod:`pipeline.mapper.keys`), so a component naming the
+    same concept as the value dedupes into a single `code` slot.
     """
     mappings = mappings or {}
     code_slots: dict[str, ConceptSlot] = {}
     unit_slots: dict[str, ConceptSlot] = {}
-    component_slots: dict[str, ConceptSlot] = {}
     category_slots: dict[str, ConceptSlot] = {}
 
     for event in events:
@@ -124,15 +125,17 @@ def detect_slots(
                     current_mapping=mappings.get(uk),
                 )
 
-        # component slots + their per-component units.
+        # component slots + their per-component units. Components share the
+        # `code|` namespace, so they merge into `code_slots`: a component that
+        # names the same concept as the headline value dedupes into one slot.
         for c in event.payload.components or []:
             ck = component_key(event, c)
-            if ck in component_slots:
-                component_slots[ck].count += 1
+            if ck in code_slots:
+                code_slots[ck].count += 1
             else:
-                component_slots[ck] = ConceptSlot(
+                code_slots[ck] = ConceptSlot(
                     key=ck,
-                    kind="component",
+                    kind="code",
                     label=f"{event.category} · {c.name}",
                     count=1,
                     sample={"value": c.value, "unit": c.unit, "timestamp": event.timestamp},
@@ -174,7 +177,6 @@ def detect_slots(
     return [
         *code_slots.values(),
         *unit_slots.values(),
-        *component_slots.values(),
         *category_slots.values(),
     ]
 
@@ -262,7 +264,7 @@ def run(
         event.stage = Stage.MAPPED
 
     slots = detect_slots(events, mappings)
-    unbound = sum(1 for s in slots if s.kind in ("code", "unit", "component") and not s.current_mapping)
+    unbound = sum(1 for s in slots if s.kind in ("code", "unit") and not s.current_mapping)
 
     stats = {
         "mapper": {

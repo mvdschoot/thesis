@@ -1,49 +1,47 @@
 adapter:
-  id: mhealth-app-usage-daily-v1
-  version: 1.0.0
-  description: 'mHealth daily app usage export: exercises, recipes, education, assessments, and gamification activity events.'
+  id: "mhealth-app-usage-daily-v1"
+  version: "1.0.0"
+  description: "mHealth app daily usage export with exercises, recipe favorites, lessons, badges, and assessment responses."
+
 match:
-  source: "mhealth"
+  source: "mHealth"
   record:
-    - field: userId
-      exists: true
-    - field: date
-      exists: true
-    - field: dataType
-      equals: app-usage-daily
-    - field: timestamp
-      exists: true
-    - field: metrics
-      type: object
-    - field: metrics.exercises
-      type: object
-    - field: metrics.exercises.completed
-      type: array
-    - field: metrics.recipes
-      type: object
-    - field: metrics.recipes.favorited
-      type: array
-    - field: metrics.education
-      type: object
-    - field: metrics.education.lessonsStarted
-      type: array
-    - field: metrics.education.lessonsCompleted
-      type: array
-    - field: metrics.gamification
-      type: object
-    - field: metrics.gamification.badgesEarned
-      type: array
+    - { field: "userId", exists: true }
+    - { field: "date", exists: true }
+    - { field: "dataType", exists: true, equals: "app-usage-daily" }
+    - { field: "timestamp", exists: true }
+    - { field: "metrics", type: "object" }
+    - { field: "metrics.exercises", type: "object" }
+    - { field: "metrics.exercises.completed", type: "array" }
+    - { field: "metrics.recipes", type: "object" }
+    - { field: "metrics.recipes.favorited", type: "array" }
+    - { field: "metrics.education", type: "object" }
+    - { field: "metrics.education.lessonsStarted", type: "array" }
+    - { field: "metrics.education.lessonsCompleted", type: "array" }
+    - { field: "metrics.gamification", type: "object" }
+    - { field: "metrics.gamification.badgesEarned", type: "array" }
+
 defaults:
   subject_id: { path: "userId" }
+  subject_id: { path: "userId" }
   context:
-    source: "mhealth"
+    source: "mHealth"
     modality: "app"
     device: null
     source_measurement_type: { path: "dataType" }
   stage: "structured"
+    source_measurement_type: { path: "dataType" }
+  stage: "structured"
   source_record_id:
-    template: mhealth:{userId}:{date}:{dataType}
+    template: "mHealth:{userId}:{dataType}:{timestamp}"
+
 emit:
+  - id: "exercise-completed"
+    description: "One event per completed exercise."
+    type: "event"
+    category: "exercise-completed"
+    granularity: "instant"
+    iterate: "metrics.exercises.completed"
   - id: "exercise-completed"
     description: "One event per completed exercise."
     type: "event"
@@ -52,38 +50,40 @@ emit:
     iterate: "metrics.exercises.completed"
     timestamp:
       start: { path: "@item.completedAt", transform: "iso_millis" }
+      start: { path: "@item.completedAt", transform: "iso_millis" }
     payload:
-      value: true
-      raw_value:
-        path: '@item.exerciseId'
+      value: { path: "@item.exerciseId" }
+      raw_value: { path: "@item.exerciseId" }
       unit: null
-      label:
-        template: exercise { @item.exerciseId } completed
+      label: "exerciseId"
     extensions:
       mhealth.exerciseId: { path: "@item.exerciseId" }
       mhealth.week: { path: "@item.week" }
       mhealth.day: { path: "@item.day" }
+      mhealth.completedAt: { path: "@item.completedAt" }
 
   - id: "recipe-favorited"
     description: "One event per favorited recipe."
-    type: "event"
+    type: "observation"
     category: "recipe-favorited"
     granularity: "instant"
     iterate: "metrics.recipes.favorited"
     timestamp:
-      start:
-        path: '@item.timestamp'
-        fallback:
-          path: '@event.timestamp'
-          transform: iso_millis
+      start: { path: "@event.timestamp", transform: "iso_millis" }
     payload:
-      value: true
-      raw_value:
-        path: '@item.recipeId'
+      value: { path: "@item.recipeId" }
+      raw_value: { path: "@item.recipeId" }
       unit: null
-      label:
-        template: recipe { @item.recipeId } favorited
+      label: "recipeId"
     extensions:
+      mhealth.recipeId: { path: "@item.recipeId" }
+
+  - id: "lesson-started"
+    description: "One event per started lesson."
+    type: "event"
+    category: "lesson-started"
+    granularity: "instant"
+    iterate: "metrics.education.lessonsStarted"
       mhealth.recipeId: { path: "@item.recipeId" }
 
   - id: "lesson-started"
@@ -94,15 +94,15 @@ emit:
     iterate: "metrics.education.lessonsStarted"
     timestamp:
       start: { path: "@item.startedAt", transform: "iso_millis" }
+      start: { path: "@item.startedAt", transform: "iso_millis" }
     payload:
-      value: true
-      raw_value:
-        path: '@item.lessonId'
+      value: { path: "@item.lessonId" }
+      raw_value: { path: "@item.lessonId" }
       unit: null
-      label:
-        template: lesson { @item.lessonId } started
+      label: "lessonId"
     extensions:
       mhealth.lessonId: { path: "@item.lessonId" }
+      mhealth.startedAt: { path: "@item.startedAt" }
 
   - id: "lesson-completed"
     description: "One event per completed lesson."
@@ -112,105 +112,75 @@ emit:
     iterate: "metrics.education.lessonsCompleted"
     timestamp:
       start: { path: "@item.completedAt", transform: "iso_millis" }
+      start: { path: "@item.completedAt", transform: "iso_millis" }
     payload:
-      value: true
-      raw_value:
-        path: '@item.lessonId'
+      value: { path: "@item.lessonId" }
+      raw_value: { path: "@item.lessonId" }
       unit: null
-      label:
-        template: lesson { @item.lessonId } completed
+      label: "lessonId"
     extensions:
       mhealth.lessonId: { path: "@item.lessonId" }
+      mhealth.completedAt: { path: "@item.completedAt" }
+
+  - id: "badge-earned"
+    description: "One event per earned badge."
+    type: "event"
+    category: "badge-earned"
+    granularity: "instant"
+    iterate: "metrics.gamification.badgesEarned"
+    timestamp:
+      start: { path: "@item.unlockedAt", transform: "iso_millis" }
+    payload:
+      value: { path: "@item.badgeId" }
+      raw_value: { path: "@item.badgeId" }
+      unit: null
+      label: "badgeId"
+    extensions:
+      mhealth.badgeId: { path: "@item.badgeId" }
+      mhealth.unlockedAt: { path: "@item.unlockedAt" }
 
   - id: "profile-question-answered"
-    description: "One event per answered profile question."
+    description: "One event per answered profile question, if present in the export."
     type: "survey"
     category: "profile-question-answered"
     granularity: "instant"
     iterate: "metrics.assessments.profileQuestionsAnswered"
     timestamp:
-      start:
-        path: '@item.answeredAt'
-        fallback:
-          path: '@event.timestamp'
-          transform: iso_millis
+      start: { path: "@event.timestamp", transform: "iso_millis" }
     payload:
-      value: true
-      raw_value:
-        path: '@item.questionId'
+      value: { path: "@item" }
+      raw_value: { path: "@item" }
       unit: null
-      label:
-        template: profile question { @item.questionId } answered
-      components:
-        - name: question_id
-          value:
-            path: '@item.questionId'
-        - name: question_category_id
-          value:
-            path: '@item.questionCategoryId'
-    extensions:
-      mhealth.questionId: { path: "@item.questionId" }
-      mhealth.questionCategoryId:
-        path: '@item.questionCategoryId'
-  - id: badge-earned
-    description: One event per earned badge.
-    type: event
-    category: badge-earned
-    granularity: instant
-    iterate: metrics.gamification.badgesEarned
-    timestamp:
-      start: { path: "@item.unlockedAt", transform: "iso_millis" }
-    payload:
-      value: true
-      raw_value:
-        path: '@item.badgeId'
-      unit: null
-      label:
-        template: badge { @item.badgeId } earned
-    extensions:
-      mhealth.badgeId: { path: "@item.badgeId" }
+      label: "profileQuestionsAnswered"
+    quality:
+      flags:
+        - code: "SYNTHETIC_TIMESTAMP"
+          severity: "info"
+          stage: "structured"
+          message: "No per-item timestamp is present for answered profile questions; the parent record timestamp is used."
 
 clean:
   heuristics:
     - whitespace
     - timestamp_normalizer
     - type_coercer
+    - unit_inferrer
 
 validate:
-  enabled:
-    - required_fields
-    - timestamp_window
-    - payload_shape
-  timestamp_window:
-    min: '2024-01-01'
-    max: now+1d
+  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+  timestamp_window: { min: "2010-01-01", max: "now+1d" }
+
 qualify:
-  enabled:
-    - completeness
-    - duplicates
-    - outliers
-    - conformance
-    - plausibility
-  outliers:
-    hampel_k: 3.5
-    min_group_size: 5
-  duplicates:
-    fields:
-      - subject_id
-      - category
-      - timestamp
-      - payload.value
-    value_round_digits: 3
-  plausibility:
-    warning_count_for_review: 1
+  enabled: [completeness, duplicates, outliers, conformance, plausibility]
+  duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
+  plausibility: { warning_count_for_review: 1 }
+
 fhir:
   enabled: true
   bundle_type: transaction
-  include:
-    - Patient
-    - Observation
-    - Questionnaire
-    - Provenance
+  include: [Patient, Observation, Questionnaire]
+
 omop:
   enabled: true
+  include: [person, measurement, observation, device_exposure, observation_period]
   include: [person, measurement, observation, device_exposure, observation_period]

@@ -18,16 +18,14 @@ interface Props {
 }
 
 const KIND_LABEL: Record<ConceptSlotKind, string> = {
-  code: "Observation.code (LOINC / SNOMED CT)",
+  code: "Observation code & component (LOINC / SNOMED CT)",
   unit: "valueQuantity unit (UCUM)",
-  component: "Observation.component (LOINC / SNOMED CT)",
   category: "Observation.category (FHIR)",
 };
 
 const KIND_BLURB: Record<ConceptSlotKind, string> = {
-  code: "Headline measurement coding. Toggle LOINC ↔ SNOMED CT inside the search box. Bind once per (category, label).",
+  code: "Headline measurement and component codings. Toggle LOINC ↔ SNOMED CT inside the search box. Bind once per concept — the same concept used as a value and as a component is bound a single time.",
   unit: "UCUM code/system on numeric valueQuantity. Bind once per unit text.",
-  component: "Per-component coding. Toggle LOINC ↔ SNOMED CT inside the search box.",
   category: "Observation category bucket. Defaults are pre-bound; override only if needed.",
 };
 
@@ -46,14 +44,14 @@ const CATEGORY_OPTIONS: Coding[] = [
 
 function defaultSystemForSlot(slot: ConceptSlot): TerminologySystem | null {
   if (slot.kind === "unit") return "ucum";
-  if (slot.kind === "code" || slot.kind === "component") return "loinc";
+  if (slot.kind === "code") return "loinc";
   return null;
 }
 
 // Which vocabularies a slot's search box can switch between.
 function vocabOptionsForSlot(slot: ConceptSlot): TerminologySystem[] {
   if (slot.kind === "unit") return ["ucum"];
-  if (slot.kind === "code" || slot.kind === "component")
+  if (slot.kind === "code")
     return ["loinc", "snomed", "rxnorm", "icd10", "cpt"];
   return [];
 }
@@ -95,7 +93,6 @@ export default function ConceptsPanel({
     const g: Record<ConceptSlotKind, ConceptSlot[]> = {
       code: [],
       unit: [],
-      component: [],
       category: [],
     };
     for (const s of slots) g[s.kind].push(s);
@@ -106,7 +103,7 @@ export default function ConceptsPanel({
     () =>
       slots.filter(
         (s) =>
-          (s.kind === "code" || s.kind === "unit" || s.kind === "component") &&
+          (s.kind === "code" || s.kind === "unit") &&
           !mappings[s.key],
       ).length,
     [slots, mappings],
@@ -199,7 +196,7 @@ export default function ConceptsPanel({
             </div>
           </div>
         )}
-        {(["code", "unit", "component", "category"] as ConceptSlotKind[]).map((kind) => {
+        {(["code", "unit", "category"] as ConceptSlotKind[]).map((kind) => {
           const rows = grouped[kind];
           if (rows.length === 0) return null;
           return (

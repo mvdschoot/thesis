@@ -72,7 +72,7 @@ export default function ResultsPanel({
     () =>
       conceptSlots.filter(
         (s) =>
-          (s.kind === "code" || s.kind === "unit" || s.kind === "component") &&
+          (s.kind === "code" || s.kind === "unit") &&
           !conceptMappings[s.key],
       ).length,
     [conceptSlots, conceptMappings],

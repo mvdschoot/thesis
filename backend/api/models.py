@@ -67,7 +67,7 @@ class Coding(BaseModel):
 class ConceptSlot(BaseModel):
     """A group of events that share a coding target — user picks once per slot."""
     key: str
-    kind: Literal["code", "unit", "component", "category"]
+    kind: Literal["code", "unit", "category"]
     label: str
     count: int
     sample: dict[str, Any]
@@ -86,7 +86,8 @@ class TransformRequest(BaseModel):
         default=None,
         description=(
             "User-picked codings keyed by slot. See pipeline.mapper.keys for the "
-            "key scheme (code|... / unit|... / component|... / category|...)."
+            "key scheme (code|... — headline values and components share this "
+            "namespace — / unit|... / category|...)."
         ),
     )
     concept_scan_only: bool = Field(

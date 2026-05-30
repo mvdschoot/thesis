@@ -92,12 +92,13 @@ Rule structure:
     - Each iteration produces an item with fields: `key`, `name` (= key), `label`, `value`. Reference them as `@item.name`, `@item.value`, `@item.label`, etc.
 - timestamp: { start: <spec>, end?: <spec>, duration_seconds?: <spec> }.
 - payload: { value, raw_value, unit, label, components: [{name, value, unit?}, ...] }.
-- Value vs. components separation (MANDATORY):
-    - `payload.value` holds a SINGLE scalar measurement (e.g., heart rate = 72).
-    - `payload.components[]` holds MULTIPLE distinct sub-measurements of a composite concept (e.g., blood pressure systolic + diastolic, or heart-rate zone with min/max/minutes/calories).
-    - NEVER duplicate the same data in both places. If the concept has one numeric value, use `payload.value` and omit components. If the concept is composite, use components only and set `payload.value` to null (or to a meaningful aggregate like "total minutes" when one exists).
-    - Anti-pattern: do NOT create a component whose value path equals `payload.value`'s path — this produces duplicate data in the canonical event and in the FHIR Observation (value[x] + component[] with the same value).
-- extensions: free-form `{ key: <spec> }` map; keys prefixed with the source name (e.g. "withings.attrib").
+- Payload triage (MANDATORY) — assign EVERY meaningful field of the record to exactly ONE of value / components / extensions:
+    - `payload.value`: the SINGLE most important data point of the record — the headline measurement or the primary entity the row is about (e.g. heart rate = 72; a completed exercise's `exerciseId`). Pick exactly one. Set it to `null` only for a genuinely composite concept with no single headline (e.g. blood pressure → systolic + diastolic live as components).
+    - `payload.components[]`: EVERY OTHER analytically relevant field — both distinct sub-measurements (systolic/diastolic; a heart-rate zone's min/max/minutes/calories) AND descriptive data fields that travel with the value (e.g. an exercise's `week` and `day`, a session `score`, a count). One entry per field: `{ name, value, unit? }`. Components MAY coexist with a non-null `value`. This is the DEFAULT bucket for any field a downstream analyst would plot, aggregate, or filter on.
+    - `extensions`: a free-form `{ key: <spec> }` map for ONLY genuine metadata / provenance that is neither the value nor a meaningful data field — opaque source identifiers, audit timestamps (created/modified), attribution flags, technical bookkeeping. Prefix keys with the source name (e.g. "withings.attrib").
+    - Per-field decision test: is this field THE point of the row? → `value`. Would an analyst compute/plot/filter on it? → a `component`. Is it just bookkeeping or source provenance? → an `extension`. When unsure between component and extension, PREFER `component`.
+    - Worked example (mHealth app-usage `metrics.exercises.completed[]`): `exerciseId` → `value`; `week` and `day` → `components`; a raw upload id or sync timestamp → `extensions`.
+    - HARD RULE: a field used as `payload.value` (or `raw_value`) MUST NOT also appear as a `payload.components[]` entry. Pick exactly ONE role per field — a component whose `value` spec equals `payload.value`'s spec produces duplicate data (value[x] + a component[] with the same value) and is stripped by the loader.
 - parent: another rule's `id` — produced events are linked via `parent_event_id`.
 - quality: { flags: [...] }. Each flag is either an unconditional `{ code, severity, stage, message }` or a conditional `{ condition: { path, equals }, code, severity, stage, message }`.
 
@@ -339,7 +340,7 @@ def build_concept_suggest_system_prompt() -> str:
         "You are a clinical terminology specialist. Your task is to map health-data "
         "concept slots to standard FHIR coding systems.\n\n"
         "You have a `search_terminology` tool. Use it to find the best code for each slot:\n"
-        "- For **code** and **component** slots: search `loinc` and `snomed` first..\n"
+        "- For **code** slots (headline measurement and component codings): search `loinc` and `snomed` first..\n"
         "- For **unit** slots: search `ucum`.\n"
         "- Skip **category** slots — they already have defaults.\n\n"
         "CRITICAL RULE: You MUST NEVER invent, guess, or recall codes from memory. "

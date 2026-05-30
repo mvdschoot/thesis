@@ -70,8 +70,14 @@ def component_unit_key(unit: str | None) -> str | None:
 
 
 def component_key(event: CanonicalEvent, component: Component) -> str:
-    """Slot key for `Observation.component[].code`."""
-    return f"component|{_norm(event.category)}|{_norm(component.name)}"
+    """Slot key for `Observation.component[].code`.
+
+    Shares the `code|` namespace with :func:`code_key` so a component that names
+    the same concept as the headline value (same category + name/label) collapses
+    to a single slot — the user binds the coding once and it fans out to both
+    `Observation.code` and the matching `Observation.component[].code`.
+    """
+    return f"code|{_norm(event.category)}|{_norm(component.name)}"
 
 
 def category_key(category_text: str) -> str:
