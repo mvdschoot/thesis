@@ -335,6 +335,62 @@ def build_fix_user_prompt(
     return "\n".join(parts)
 
 
+def build_edit_system_prompt() -> str:
+    """System prompt for the /api/edit-config LLM call.
+
+    Same DSL + canonical model + few-shot examples as generation, but framed as
+    applying a user-requested change to an existing, working config.
+    """
+    return (
+        "You edit YAML adapter configs for the Progressive Harmonization ETL. "
+        "The user has a working config and a natural-language description of a "
+        "change they want made to it. Apply ONLY the requested change, preserve "
+        "everything else exactly as-is, and return the complete updated YAML "
+        "config.\n\n"
+        "## Canonical Event model (Python dataclasses — target shape of every emitted event)\n\n"
+        "```python\n" + _load_canonical_model() + "\n```\n\n"
+        "## " + DSL_OVERVIEW + "\n\n"
+        "## Reference configs\n\n"
+        + _load_few_shot()
+    )
+
+
+def build_edit_user_prompt(
+    *,
+    yaml_text: str,
+    instruction: str,
+    sample_data: Any = None,
+    source: str | None = None,
+) -> str:
+    parts = [
+        "## Current YAML config",
+        "```yaml",
+        yaml_text.strip(),
+        "```",
+        "",
+        "## Requested change (user-supplied)",
+        instruction.strip() or "(no change described)",
+    ]
+    if source:
+        parts += ["", "## `match.source` must remain", f"`{source}`"]
+    if sample_data is not None:
+        parts += [
+            "",
+            "## Input data sample (context — the config runs against records like this)",
+            "```json",
+            _truncate_sample(sample_data),
+            "```",
+        ]
+    parts += [
+        "",
+        "Apply ONLY the requested change above. Preserve every other section, "
+        "field, and value exactly as in the current config. Do not invent fields "
+        "the sample data doesn't contain. Output only the complete updated YAML — "
+        "no prose, no fencing.",
+    ]
+    return "\n".join(parts)
+
+
 def build_concept_suggest_system_prompt() -> str:
     return (
         "You are a clinical terminology specialist. Your task is to map health-data "

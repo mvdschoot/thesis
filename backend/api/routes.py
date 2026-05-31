@@ -26,6 +26,8 @@ from .models import (
     Coding,
     ConfigMatch,
     ConfigMatchAdapterInfo,
+    EditConfigRequest,
+    EditConfigResponse,
     GenerateConfigRequest,
     GenerateConfigResponse,
     InputFormat,
@@ -43,6 +45,8 @@ from .models import (
 from .prompts import (
     build_concept_suggest_system_prompt,
     build_concept_suggest_user_prompt,
+    build_edit_system_prompt,
+    build_edit_user_prompt,
     build_fix_system_prompt,
     build_fix_user_prompt,
     build_system_prompt,
@@ -358,6 +362,58 @@ def suggest_config_fix(req: SuggestFixRequest) -> SuggestFixResponse:
         )
 
     return SuggestFixResponse(yaml=yaml_text)
+
+
+# ─── /edit-config ────────────────────────────────────────────────────────────
+
+@router.post("/edit-config", response_model=EditConfigResponse)
+def edit_config(req: EditConfigRequest) -> EditConfigResponse:
+    """LLM-edit an adapter config from a natural-language instruction.
+
+    Same client/few-shot corpus as `/api/generate-config`; the LLM applies the
+    user's requested change and returns the full updated YAML. Does NOT save —
+    the frontend previews a diff and lets the user apply it to the editor.
+    """
+    if not req.yaml or not req.yaml.strip():
+        raise HTTPException(status_code=400, detail="No YAML config provided.")
+    if not req.instruction or not req.instruction.strip():
+        raise HTTPException(status_code=400, detail="No edit instruction provided.")
+
+    try:
+        client = _get_llm_client()
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    system = build_edit_system_prompt()
+    user = build_edit_user_prompt(
+        yaml_text=req.yaml,
+        instruction=req.instruction,
+        sample_data=req.sample_data,
+        source=req.source,
+    )
+
+    try:
+        raw = client.generate(system=system, user=user)
+    except Exception as e:
+        logger.exception("LLM edit failed")
+        raise HTTPException(status_code=502, detail=f"LLM error: {e}")
+
+    yaml_text = strip_code_fence(raw)
+    try:
+        parsed = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=502, detail=f"LLM returned invalid YAML: {e}")
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="LLM returned non-mapping YAML.")
+    try:
+        ConfigAdapter.from_dict(parsed)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM returned a YAML missing required sections: {e}",
+        )
+
+    return EditConfigResponse(yaml=yaml_text)
 
 
 # ─── /terminology/search (NLM Clinical Tables proxy) ────────────────────────

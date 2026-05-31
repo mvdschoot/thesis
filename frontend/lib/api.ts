@@ -154,6 +154,17 @@ export interface SuggestFixResponse {
   yaml: string;
 }
 
+export interface EditConfigRequest {
+  yaml: string;
+  instruction: string;
+  sample_data?: unknown;
+  source?: string;
+}
+
+export interface EditConfigResponse {
+  yaml: string;
+}
+
 export type TerminologySystem = "loinc" | "ucum" | "snomed" | "rxnorm" | "icd10" | "cpt";
 
 export function generateConfig(req: GenerateConfigRequest) {
@@ -166,6 +177,10 @@ export function transform(req: TransformRequest, signal?: AbortSignal) {
 
 export function suggestConfigFix(req: SuggestFixRequest) {
   return post<SuggestFixResponse>("/api/suggest-config-fix", req);
+}
+
+export function editConfig(req: EditConfigRequest) {
+  return post<EditConfigResponse>("/api/edit-config", req);
 }
 
 export function listConfigs() {

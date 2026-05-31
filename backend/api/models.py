@@ -153,6 +153,24 @@ class SuggestFixResponse(BaseModel):
     yaml: str
 
 
+class EditConfigRequest(BaseModel):
+    yaml: str = Field(..., description="The current YAML config to edit.")
+    instruction: str = Field(
+        ..., description="Natural-language description of the change to apply."
+    )
+    sample_data: Any = Field(
+        default=None,
+        description="Optional input sample for context (records the config runs on).",
+    )
+    source: str | None = Field(
+        default=None, description="Optional source name the config handles."
+    )
+
+
+class EditConfigResponse(BaseModel):
+    yaml: str
+
+
 class SuggestConceptsRequest(BaseModel):
     slots: list[ConceptSlot]
 

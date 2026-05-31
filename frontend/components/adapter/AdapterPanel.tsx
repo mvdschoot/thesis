@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { updateConfig, type ConfigMatch, type Descriptor } from "@/lib/api";
+import { editConfig, updateConfig, type ConfigMatch, type Descriptor } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import type { AdapterConfig } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
@@ -11,6 +11,7 @@ import DefaultsEditor from "./DefaultsEditor";
 import EmitEditor from "./EmitEditor";
 import LLMDialog from "./LLMDialog";
 import MatchEditor from "./MatchEditor";
+import YamlDiffEditor from "./YamlDiffEditor";
 import YamlEditor from "./YamlEditor";
 
 type Tab = "header" | "match" | "defaults" | "emit";
@@ -61,6 +62,13 @@ export default function AdapterPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  // "Edit with AI" state — natural-language YAML editing via the LLM.
+  const [showEditBox, setShowEditBox] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [proposed, setProposed] = useState<string | null>(null);
+
   // Re-seed the buffer from the current config every time we enter YAML mode
   // or the active config changes. The parsed config is the source of truth in
   // visual mode; flipping into YAML mode regenerates the on-disk shape.
@@ -72,6 +80,10 @@ export default function AdapterPanel({
     setYamlError(null);
     setSaveError(null);
     setSavedAt(null);
+    setProposed(null);
+    setShowEditBox(false);
+    setInstruction("");
+    setEditError(null);
     // We want this to fire on entering YAML mode or when the user picks a
     // different config — not on every visual edit (those are reflected via the
     // re-seed-on-toggle path).
@@ -112,6 +124,34 @@ export default function AdapterPanel({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleEdit() {
+    if (!instruction.trim() || editing) return;
+    setEditing(true);
+    setEditError(null);
+    try {
+      const res = await editConfig({
+        yaml: yamlText,
+        instruction,
+        sample_data: inputData ?? undefined,
+        source: source || undefined,
+      });
+      setProposed(res.yaml);
+      setShowEditBox(false);
+    } catch (e) {
+      setEditError((e as Error).message);
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  function applyProposed() {
+    if (proposed === null) return;
+    handleYamlChange(proposed);
+    setProposed(null);
+    setInstruction("");
+    setShowEditBox(false);
   }
 
   return (
@@ -276,6 +316,23 @@ export default function AdapterPanel({
                 ) : null}
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                   <button
+                    className="btn"
+                    onClick={() => setShowEditBox((s) => !s)}
+                    disabled={editing || proposed !== null}
+                    title="Describe a change in natural language and let the LLM rewrite the YAML."
+                  >
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "var(--accent)",
+                      }}
+                    />
+                    Edit with AI
+                  </button>
+                  <button
                     className={cx("btn", canSave && "primary")}
                     disabled={!canSave}
                     onClick={handleSave}
@@ -319,31 +376,104 @@ export default function AdapterPanel({
           <div className="card-body">
             {showYaml ? (
               <>
-                <YamlEditor value={yamlText} onChange={handleYamlChange} height={520} />
-                {yamlError && (
-                  <div className="qflag err" style={{ marginTop: 12 }}>
-                    <div className="qf-bar" />
-                    <div>
-                      <div className="qf-code">YAML_PARSE_ERROR</div>
-                      <div className="qf-msg">{yamlError}</div>
+                {showEditBox && proposed === null && (
+                  <div style={{ marginBottom: 12 }}>
+                    <textarea
+                      className="textarea mono"
+                      rows={3}
+                      placeholder="Describe the change you want… e.g. “round all timestamps to the start of the day” or “add an omop block targeting the measurement table”"
+                      value={instruction}
+                      onChange={(e) => setInstruction(e.target.value)}
+                      disabled={editing}
+                    />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button
+                        className="btn primary"
+                        onClick={handleEdit}
+                        disabled={editing || !instruction.trim()}
+                      >
+                        {editing ? "Asking LLM…" : "Send"}
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => setShowEditBox(false)}
+                        disabled={editing}
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 )}
-                {saveError && (
-                  <div className="qflag err" style={{ marginTop: 12 }}>
+                {editError && (
+                  <div className="qflag err" style={{ marginBottom: 12 }}>
                     <div className="qf-bar" />
                     <div>
-                      <div className="qf-code">SAVE_FAILED</div>
-                      <div className="qf-msg">{saveError}</div>
+                      <div className="qf-code">EDIT_REQUEST_FAILED</div>
+                      <div className="qf-msg">{editError}</div>
                     </div>
                   </div>
                 )}
-                <div className="help" style={{ marginTop: 10 }}>
-                  Edits update the visual editor live (when YAML parses). Save writes to{" "}
-                  <span className="mono">backend/configs/{configKey}.yaml</span> via PUT
-                  /api/configs/{configKey}. Renaming <span className="mono">adapter.id</span> is
-                  rejected by the backend.
-                </div>
+                {proposed !== null ? (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span className="chip" style={{ color: "var(--accent)" }}>
+                        AI proposal
+                      </span>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        Review the diff — left is your current YAML, right is the proposed change.
+                      </span>
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                        <button className="btn primary" onClick={applyProposed}>
+                          Apply to editor
+                        </button>
+                        <button className="btn" onClick={() => setProposed(null)}>
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+                    <YamlDiffEditor original={yamlText} modified={proposed} height={520} />
+                    <div className="help" style={{ marginTop: 10 }}>
+                      Apply copies the proposal into the editor; Save then writes it to{" "}
+                      <span className="mono">backend/configs/{configKey}.yaml</span>. Discard
+                      keeps your current YAML untouched.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <YamlEditor value={yamlText} onChange={handleYamlChange} height={520} />
+                    {yamlError && (
+                      <div className="qflag err" style={{ marginTop: 12 }}>
+                        <div className="qf-bar" />
+                        <div>
+                          <div className="qf-code">YAML_PARSE_ERROR</div>
+                          <div className="qf-msg">{yamlError}</div>
+                        </div>
+                      </div>
+                    )}
+                    {saveError && (
+                      <div className="qflag err" style={{ marginTop: 12 }}>
+                        <div className="qf-bar" />
+                        <div>
+                          <div className="qf-code">SAVE_FAILED</div>
+                          <div className="qf-msg">{saveError}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="help" style={{ marginTop: 10 }}>
+                      Edits update the visual editor live (when YAML parses). Save writes to{" "}
+                      <span className="mono">backend/configs/{configKey}.yaml</span> via PUT
+                      /api/configs/{configKey}. Renaming <span className="mono">adapter.id</span> is
+                      rejected by the backend.
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <>
