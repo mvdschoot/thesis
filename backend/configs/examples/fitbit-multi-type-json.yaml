@@ -1,0 +1,118 @@
+adapter:
+  id: fitbit-multi-type-json
+  version: 1.0.0
+  description: >-
+    Fitbit JSON stream where each array element is a different measurement kind,
+    discriminated by `measurementType`. Demonstrates per-rule `when:` gating so a
+    record only triggers the rules for its own kind, plus intraday fan-out via
+    `iterate`.
+match:
+  source: fitbit
+  record:
+    - field: userId
+      exists: true
+    - field: measurementType
+      exists: true
+    - field: measurementValue
+      type: object
+defaults:
+  subject_id:
+    path: userId
+  context:
+    source: fitbit
+    modality: wearable
+    device: null
+    source_measurement_type:
+      path: measurementType
+  stage: structured
+  source_record_id:
+    template: fitbit:{userId}:{measurementType}:{measurementDateTime}
+emit:
+  # One daily rule per kind, gated on measurementType so it never fires
+  # (and never emits null events) for the other kinds in the same stream.
+  - id: daily-steps
+    description: Daily steps summary — only for steps records.
+    type: measurement
+    category: steps
+    granularity: daily
+    when:
+      field: measurementType
+      equals: steps
+    timestamp:
+      start:
+        path: measurementValue.activities-steps[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-steps[0].value
+      unit: steps
+      label: daily steps
+  # Intraday fan-out: one event per dataset slice. The same `when:` gate keeps
+  # this rule inert for non-steps records.
+  - id: intraday-steps
+    description: Intraday steps dataset, one event per time slice.
+    type: measurement
+    category: steps-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: steps
+    iterate: measurementValue.activities-steps-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+    payload:
+      value:
+        path: '@item.value'
+      unit: steps
+      label: intraday steps
+  - id: daily-calories
+    description: Daily calories summary — only for calories records.
+    type: measurement
+    category: calories
+    granularity: daily
+    when:
+      field: measurementType
+      equals: calories
+    timestamp:
+      start:
+        path: measurementValue.activities-calories[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-calories[0].value
+      unit: kcal
+      label: daily calories
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  categories:
+    steps:
+      unit_whitelist:
+        - steps
+    steps-intraday:
+      unit_whitelist:
+        - steps
+    calories:
+      unit_whitelist:
+        - kcal
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include:
+    - Patient
+    - Observation
+omop:
+  enabled: true
+  include:
+    - person
+    - measurement
+    - observation
+    - observation_period

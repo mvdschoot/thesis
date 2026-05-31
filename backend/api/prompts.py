@@ -12,7 +12,11 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 CONFIG_EXAMPLES_DIR = BACKEND_DIR / "configs" / "examples"
 CANONICAL_MODEL_PATH = BACKEND_DIR / "domain" / "models.py"
 
-FEW_SHOT_FILES = ["withings-body-scale.yaml", "fitabase-fitbit-csv.yaml"]
+FEW_SHOT_FILES = [
+    "withings-body-scale.yaml",
+    "fitabase-fitbit-csv.yaml",
+    "fitbit-multi-type-json.yaml",
+]
 
 MAX_SAMPLE_BYTES = 20_000
 # Per-file cap for descriptor content embedded into the prompt. Schemas/specs
@@ -84,7 +88,8 @@ Rule structure:
 - type: one of "measurement" | "observation" | "survey" | "event" | "summary" | "session".
 - category: a string (often a value-spec resolving the category from `@item`).
 - granularity: "instant" | "interval" | "daily" | "session" | "unknown".
-- iterate: path to a list inside the record — one event per element. `@item` references resolve against that element; `@event` references resolve against the whole record, so you can combine per-element fields (`@item.recipeId`) with event-level fields (`@event.date`, `@event.userId`) in the same rule. (Plain unprefixed paths also resolve against the record, but prefer `@event.` inside iterated rules to make the intent explicit.)
+- when (optional): a predicate — or a list of predicates, ANDed — that gates whether this rule fires for a given record. Same clause shape and verbs as `match.record` (`field` + `equals`/`in`/`exists`/`type`/`non_empty`). This is the canonical way to handle a source that interleaves multiple record kinds in one stream (e.g. one `measurementType`/`recordKind`/`dataType` per object): write one rule per kind and gate each with `when: { field: measurementType, equals: <kind> }` so a rule never emits null events for the wrong kind. Records that match no rule are simply skipped (surfaced as a `when_not_met` diagnostic).
+- iterate: path to a list inside the record — one event per element. May also be a value-spec (e.g. a `lookup` keyed on the record kind that selects which array to iterate), not only a literal path string. `@item` references resolve against that element; `@event` references resolve against the whole record, so you can combine per-element fields (`@item.recipeId`) with event-level fields (`@event.date`, `@event.userId`) in the same rule. (Plain unprefixed paths also resolve against the record, but prefer `@event.` inside iterated rules to make the intent explicit.)
 - iterate_object: expand an object's keys into one event per key.
     - `source` (optional): path to the source dict. Defaults to the root record. Use `"."` or omit for flat CSVs.
     - `entries: [{ key, label }, ...]` — explicit list of keys to iterate.

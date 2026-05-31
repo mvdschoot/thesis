@@ -518,6 +518,34 @@ class ConfigAdapter(BaseAdapter):
                     path=name,
                 )
 
+        # Per-rule gating: a `when:` predicate (or list of predicates, ANDed)
+        # decides whether this rule fires for THIS record. Lets one config carry
+        # rules for heterogeneous record kinds (e.g. one `measurementType` per
+        # object) without each rule emitting null events for the wrong kind.
+        when = rule.get("when")
+        if when is not None:
+            clauses = when if isinstance(when, list) else [when]
+            for cond in clauses:
+                if not _evaluate_predicate(cond, record):
+                    if collector is not None:
+                        failure = _explain_predicate(cond, record)
+                        verb, expected, actual = (
+                            failure if failure is not None else ("?", None, None)
+                        )
+                        collector.record_skip(
+                            code="when_not_met",
+                            detail=(
+                                f"Rule '{rule_id}': when clause "
+                                f"`{cond.get('field')} {verb} {expected!r}` not met "
+                                f"(actual: {actual!r})."
+                            ),
+                            path=cond.get("field"),
+                            expected=expected,
+                            actual=actual,
+                            record_keys=top_level_keys(record),
+                        )
+                    return events  # empty → rule does not fire for this record
+
         parent_id = None
         parent_ref = rule.get("parent")
         if parent_ref and parent_ref in rule_events:
@@ -534,18 +562,31 @@ class ConfigAdapter(BaseAdapter):
                     path=parent_ref,
                 )
 
-        iterate_path = rule.get("iterate")
-        if iterate_path and not iterate_path.startswith("@"):
-            items = _resolve_path(record, iterate_path)
+        iterate_spec = rule.get("iterate")
+        # `iterate` is normally a dotted path string, but may also be a value-spec
+        # (e.g. a lookup that picks the array per record kind). Resolve both forms;
+        # a literal "@..." string is treated as "no iteration" (legacy behaviour).
+        iterate_label = (
+            iterate_spec if isinstance(iterate_spec, str) else "<iterate value-spec>"
+        )
+        items_resolved = False
+        items: Any = None
+        if isinstance(iterate_spec, dict):
+            items = _resolve_value(iterate_spec, record, None, record_index=record_index)
+            items_resolved = True
+        elif isinstance(iterate_spec, str) and not iterate_spec.startswith("@"):
+            items = _resolve_path(record, iterate_spec)
+            items_resolved = True
+        if items_resolved:
             if items is None:
                 if collector is not None:
                     collector.record_skip(
                         code="iterate_path_none",
                         detail=(
-                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            f"Rule '{rule_id}': iterate path '{iterate_label}' "
                             "did not resolve in this record."
                         ),
-                        path=iterate_path,
+                        path=iterate_label,
                         record_keys=top_level_keys(record),
                     )
             elif not isinstance(items, list):
@@ -553,10 +594,10 @@ class ConfigAdapter(BaseAdapter):
                     collector.record_skip(
                         code="iterate_not_list",
                         detail=(
-                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            f"Rule '{rule_id}': iterate path '{iterate_label}' "
                             f"resolved to {type(items).__name__} (expected array)."
                         ),
-                        path=iterate_path,
+                        path=iterate_label,
                         actual=type(items).__name__,
                         expected="array",
                     )
@@ -565,10 +606,10 @@ class ConfigAdapter(BaseAdapter):
                     collector.record_skip(
                         code="iterate_empty",
                         detail=(
-                            f"Rule '{rule_id}': iterate path '{iterate_path}' "
+                            f"Rule '{rule_id}': iterate path '{iterate_label}' "
                             "is an empty array."
                         ),
-                        path=iterate_path,
+                        path=iterate_label,
                     )
             else:
                 for item in items:

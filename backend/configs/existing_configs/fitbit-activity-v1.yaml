@@ -1,0 +1,440 @@
+adapter:
+  id: fitbit-activity-v1
+  version: 1.0.0
+  description: >-
+    Fitbit activity export where each array element is a single measurement type
+    (steps, distance, calories, floors, heart-rate, sleep) with its own
+    measurementValue shape. Each emit rule is gated with `when:` on
+    measurementType so a record only triggers the rules for its own kind — daily
+    summary plus, where present, an intraday dataset fanned out one event per slice.
+match:
+  source: fitbit
+  record:
+    - field: userId
+      exists: true
+    - field: measurementType
+      exists: true
+    - field: measurementDateTime
+      exists: true
+    - field: measurementValue
+      type: object
+defaults:
+  subject_id:
+    path: userId
+  context:
+    source: fitbit
+    modality: wearable
+    device: null
+    source_measurement_type:
+      path: measurementType
+  stage: structured
+  source_record_id:
+    template: fitbit:{userId}:{measurementType}:{measurementDateTime}
+emit:
+  # ---------------- steps ----------------
+  - id: daily-steps
+    description: Daily Fitbit steps summary.
+    type: measurement
+    category: steps
+    granularity: daily
+    when:
+      field: measurementType
+      equals: steps
+    timestamp:
+      start:
+        path: measurementValue.activities-steps[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-steps[0].value
+      raw_value:
+        path: measurementValue.activities-steps[0].value
+      unit: steps
+      label: daily steps
+  - id: intraday-steps
+    description: Intraday Fitbit steps dataset, one event per time slice.
+    type: measurement
+    category: steps-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: steps
+    iterate: measurementValue.activities-steps-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+      duration_seconds:
+        multiply:
+          - path: measurementValue.activities-steps-intraday.datasetInterval
+          - 60
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: steps
+      label: intraday steps
+      components:
+        - name: datasetType
+          value:
+            path: '@event.measurementValue.activities-steps-intraday.datasetType'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-steps-intraday.datasetInterval'
+  # ---------------- distance ----------------
+  - id: daily-distance
+    description: Daily Fitbit distance summary.
+    type: measurement
+    category: distance
+    granularity: daily
+    when:
+      field: measurementType
+      equals: distance
+    timestamp:
+      start:
+        path: measurementValue.activities-distance[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-distance[0].value
+      raw_value:
+        path: measurementValue.activities-distance[0].value
+      unit: km
+      label: daily distance
+  - id: intraday-distance
+    description: Intraday Fitbit distance dataset, one event per time slice.
+    type: measurement
+    category: distance-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: distance
+    iterate: measurementValue.activities-distance-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+      duration_seconds:
+        multiply:
+          - path: measurementValue.activities-distance-intraday.datasetInterval
+          - 60
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: km
+      label: intraday distance
+      components:
+        - name: datasetType
+          value:
+            path: '@event.measurementValue.activities-distance-intraday.datasetType'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-distance-intraday.datasetInterval'
+  # ---------------- calories ----------------
+  - id: daily-calories
+    description: Daily Fitbit calories summary.
+    type: measurement
+    category: calories
+    granularity: daily
+    when:
+      field: measurementType
+      equals: calories
+    timestamp:
+      start:
+        path: measurementValue.activities-calories[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-calories[0].value
+      raw_value:
+        path: measurementValue.activities-calories[0].value
+      unit: kcal
+      label: daily calories
+  - id: intraday-calories
+    description: Intraday Fitbit calories dataset, one event per time slice.
+    type: measurement
+    category: calories-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: calories
+    iterate: measurementValue.activities-calories-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+      duration_seconds:
+        multiply:
+          - path: measurementValue.activities-calories-intraday.datasetInterval
+          - 60
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: kcal
+      label: intraday calories
+      components:
+        - name: mets
+          value:
+            path: '@item.mets'
+        - name: level
+          value:
+            path: '@item.level'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-calories-intraday.datasetInterval'
+  # ---------------- floors ----------------
+  - id: daily-floors
+    description: Daily Fitbit floors summary.
+    type: measurement
+    category: floors
+    granularity: daily
+    when:
+      field: measurementType
+      equals: floors
+    timestamp:
+      start:
+        path: measurementValue.activities-floors[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-floors[0].value
+      raw_value:
+        path: measurementValue.activities-floors[0].value
+      unit: floors
+      label: daily floors
+  - id: intraday-floors
+    description: Intraday Fitbit floors dataset, one event per time slice.
+    type: measurement
+    category: floors-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: floors
+    iterate: measurementValue.activities-floors-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+      duration_seconds:
+        multiply:
+          - path: measurementValue.activities-floors-intraday.datasetInterval
+          - 60
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: floors
+      label: intraday floors
+  # ---------------- heart rate ----------------
+  - id: heart-rate-zones
+    description: Daily heart-rate zone summary, one event per zone.
+    type: measurement
+    category: heart-rate-zone
+    granularity: daily
+    when:
+      field: measurementType
+      equals: heart-rate-intraday
+    iterate: measurementValue.activities-heart[0].value.heartRateZones
+    timestamp:
+      start:
+        path: measurementValue.activities-heart[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: '@item.minutes'
+      raw_value:
+        path: '@item.minutes'
+      unit: min
+      label:
+        template: 'heart-rate zone {@item.name}'
+      components:
+        - name: zone
+          value:
+            path: '@item.name'
+        - name: min_bpm
+          value:
+            path: '@item.min'
+          unit: bpm
+        - name: max_bpm
+          value:
+            path: '@item.max'
+          unit: bpm
+        - name: caloriesOut
+          value:
+            path: '@item.caloriesOut'
+          unit: kcal
+  - id: heart-rate-intraday
+    description: Intraday heart-rate dataset, one event per time slice.
+    type: measurement
+    category: heart-rate-intraday
+    granularity: interval
+    when:
+      field: measurementType
+      equals: heart-rate-intraday
+    iterate: measurementValue.activities-heart-intraday.dataset
+    timestamp:
+      start:
+        date_from:
+          path: measurementDateTime
+        time_from:
+          path: '@item.time'
+      duration_seconds:
+        multiply:
+          - path: measurementValue.activities-heart-intraday.datasetInterval
+          - 60
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: bpm
+      label: intraday heart rate
+  # ---------------- sleep ----------------
+  - id: sleep-summary
+    description: Daily Fitbit sleep summary.
+    type: measurement
+    category: sleep
+    granularity: daily
+    when:
+      field: measurementType
+      equals: sleep-log
+    timestamp:
+      start:
+        path: measurementDateTime
+        transform: iso_millis
+    payload:
+      value:
+        path: measurementValue.summary.totalMinutesAsleep
+      raw_value:
+        path: measurementValue.summary.totalMinutesAsleep
+      unit: min
+      label: minutes asleep
+      components:
+        - name: totalTimeInBed
+          value:
+            path: measurementValue.summary.totalTimeInBed
+          unit: min
+        - name: totalSleepRecords
+          value:
+            path: measurementValue.summary.totalSleepRecords
+  - id: sleep-records
+    description: Individual Fitbit sleep records, one event per logged sleep.
+    type: measurement
+    category: sleep-record
+    granularity: session
+    when:
+      field: measurementType
+      equals: sleep-log
+    iterate: measurementValue.sleep
+    timestamp:
+      start:
+        path: '@item.startTime'
+        transform: iso_millis
+      end:
+        path: '@item.endTime'
+        transform: iso_millis
+      duration_seconds:
+        path: '@item.duration'
+    payload:
+      value:
+        path: '@item.minutesAsleep'
+      raw_value:
+        path: '@item.minutesAsleep'
+      unit: min
+      label: sleep record
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2010-01-01'
+    max: now+1d
+  categories:
+    steps:
+      unit_whitelist:
+        - steps
+    steps-intraday:
+      unit_whitelist:
+        - steps
+    distance:
+      unit_whitelist:
+        - km
+    distance-intraday:
+      unit_whitelist:
+        - km
+    calories:
+      unit_whitelist:
+        - kcal
+    calories-intraday:
+      unit_whitelist:
+        - kcal
+    floors:
+      unit_whitelist:
+        - floors
+    floors-intraday:
+      unit_whitelist:
+        - floors
+    heart-rate-zone:
+      unit_whitelist:
+        - min
+    heart-rate-intraday:
+      unit_whitelist:
+        - bpm
+    sleep:
+      unit_whitelist:
+        - min
+    sleep-record:
+      unit_whitelist:
+        - min
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include:
+    - Patient
+    - Observation
+omop:
+  enabled: true
+  include:
+    - person
+    - measurement
+    - observation
+    - device_exposure
+    - observation_period
