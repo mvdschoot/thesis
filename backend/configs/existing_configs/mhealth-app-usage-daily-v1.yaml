@@ -223,6 +223,7 @@ fhir:
     - Patient
     - Observation
     - Questionnaire
+    - Provenance
 omop:
   enabled: true
   include:

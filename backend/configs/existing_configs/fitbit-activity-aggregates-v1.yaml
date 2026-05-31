@@ -1,0 +1,232 @@
+adapter:
+  id: fitbit-activity-aggregates-v1
+  version: 1.0.0
+  description: >-
+    Heavily modified Fitbit aggregate activity records with daily summaries and intraday datasets for steps, distance,
+    and calories.
+match:
+  source: fitbit
+  record:
+    - field: userId
+      exists: true
+    - field: measurementType
+      exists: true
+    - field: measurementDateTime
+      exists: true
+    - field: measurementValue
+      type: object
+defaults:
+  subject_id:
+    path: userId
+  context:
+    source: fitbit
+    modality: wearable
+    device: null
+    source_measurement_type:
+      path: measurementType
+  stage: structured
+  source_record_id:
+    template: fitbit:{userId}:{measurementType}:{measurementDateTime}
+emit:
+  - id: daily-steps
+    description: Daily Fitbit steps summary.
+    type: measurement
+    category: steps
+    granularity: daily
+    timestamp:
+      start:
+        path: measurementValue.activities-steps[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-steps[0].value
+      raw_value:
+        path: measurementValue.activities-steps[0].value
+      unit: steps
+      label: daily steps
+      components:
+        - name: measurement_type
+          value:
+            path: measurementType
+  - id: daily-distance
+    description: Daily Fitbit distance summary.
+    type: measurement
+    category: distance
+    granularity: daily
+    timestamp:
+      start:
+        path: measurementValue.activities-distance[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-distance[0].value
+      raw_value:
+        path: measurementValue.activities-distance[0].value
+      unit: km
+      label: daily distance
+      components:
+        - name: measurement_type
+          value:
+            path: measurementType
+  - id: daily-calories
+    description: Daily Fitbit calories summary.
+    type: measurement
+    category: calories
+    granularity: daily
+    timestamp:
+      start:
+        path: measurementValue.activities-calories[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: measurementValue.activities-calories[0].value
+      raw_value:
+        path: measurementValue.activities-calories[0].value
+      unit: kcal
+      label: daily calories
+      components:
+        - name: measurement_type
+          value:
+            path: measurementType
+  - id: intraday-steps
+    description: Intraday Fitbit steps dataset emitted as one event per time slice.
+    type: measurement
+    category: steps-intraday
+    granularity: interval
+    iterate: measurementValue.activities-steps-intraday.dataset
+    timestamp:
+      start:
+        template: '{measurementDateTime} {@item.time}'
+        parse_timestamp: '%Y-%m-%dT%H:%M:%S.%fZ %H:%M:%S'
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: steps
+      label: intraday steps
+      components:
+        - name: datasetType
+          value:
+            path: '@event.measurementValue.activities-steps-intraday.datasetType'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-steps-intraday.datasetInterval'
+  - id: intraday-distance
+    description: Intraday Fitbit distance dataset emitted as one event per time slice.
+    type: measurement
+    category: distance-intraday
+    granularity: interval
+    iterate: measurementValue.activities-distance-intraday.dataset
+    timestamp:
+      start:
+        template: '{measurementDateTime} {@item.time}'
+        parse_timestamp: '%Y-%m-%dT%H:%M:%S.%fZ %H:%M:%S'
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: km
+      label: intraday distance
+      components:
+        - name: datasetType
+          value:
+            path: '@event.measurementValue.activities-distance-intraday.datasetType'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-distance-intraday.datasetInterval'
+  - id: intraday-calories
+    description: Intraday Fitbit calories dataset emitted as one event per time slice.
+    type: measurement
+    category: calories-intraday
+    granularity: interval
+    iterate: measurementValue.activities-calories-intraday.dataset
+    timestamp:
+      start:
+        template: '{measurementDateTime} {@item.time}'
+        parse_timestamp: '%Y-%m-%dT%H:%M:%S.%fZ %H:%M:%S'
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      unit: kcal
+      label: intraday calories
+      components:
+        - name: mets
+          value:
+            path: '@item.mets'
+        - name: level
+          value:
+            path: '@item.level'
+        - name: datasetType
+          value:
+            path: '@event.measurementValue.activities-calories-intraday.datasetType'
+        - name: datasetInterval
+          value:
+            path: '@event.measurementValue.activities-calories-intraday.datasetInterval'
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2010-01-01'
+    max: now+1d
+  categories:
+    steps:
+      unit_whitelist:
+        - steps
+    distance:
+      unit_whitelist:
+        - km
+    calories:
+      unit_whitelist:
+        - kcal
+    steps-intraday:
+      unit_whitelist:
+        - steps
+    distance-intraday:
+      unit_whitelist:
+        - km
+    calories-intraday:
+      unit_whitelist:
+        - kcal
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  enabled: true
+  bundle_type: transaction
+  include:
+    - Patient
+    - Observation
+omop:
+  enabled: true
+  include:
+    - person
+    - measurement
+    - observation
+    - device_exposure
+    - observation_period
