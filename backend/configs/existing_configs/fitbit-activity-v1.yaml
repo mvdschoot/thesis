@@ -2,11 +2,10 @@ adapter:
   id: fitbit-activity-v1
   version: 1.0.0
   description: >-
-    Fitbit activity export where each array element is a single measurement type
-    (steps, distance, calories, floors, heart-rate, sleep) with its own
-    measurementValue shape. Each emit rule is gated with `when:` on
-    measurementType so a record only triggers the rules for its own kind — daily
-    summary plus, where present, an intraday dataset fanned out one event per slice.
+    Fitbit activity export where each array element is a single measurement type (steps, distance, calories, floors,
+    heart-rate, sleep) with its own measurementValue shape. Each emit rule is gated with `when:` on measurementType so a
+    record only triggers the rules for its own kind — daily summary plus, where present, an intraday dataset fanned out
+    one event per slice.
 match:
   source: fitbit
   record:
@@ -31,7 +30,6 @@ defaults:
   source_record_id:
     template: fitbit:{userId}:{measurementType}:{measurementDateTime}
 emit:
-  # ---------------- steps ----------------
   - id: daily-steps
     description: Daily Fitbit steps summary.
     type: measurement
@@ -77,14 +75,6 @@ emit:
         path: '@item.value'
       unit: steps
       label: intraday steps
-      components:
-        - name: datasetType
-          value:
-            path: '@event.measurementValue.activities-steps-intraday.datasetType'
-        - name: datasetInterval
-          value:
-            path: '@event.measurementValue.activities-steps-intraday.datasetInterval'
-  # ---------------- distance ----------------
   - id: daily-distance
     description: Daily Fitbit distance summary.
     type: measurement
@@ -130,14 +120,6 @@ emit:
         path: '@item.value'
       unit: km
       label: intraday distance
-      components:
-        - name: datasetType
-          value:
-            path: '@event.measurementValue.activities-distance-intraday.datasetType'
-        - name: datasetInterval
-          value:
-            path: '@event.measurementValue.activities-distance-intraday.datasetInterval'
-  # ---------------- calories ----------------
   - id: daily-calories
     description: Daily Fitbit calories summary.
     type: measurement
@@ -190,10 +172,6 @@ emit:
         - name: level
           value:
             path: '@item.level'
-        - name: datasetInterval
-          value:
-            path: '@event.measurementValue.activities-calories-intraday.datasetInterval'
-  # ---------------- floors ----------------
   - id: daily-floors
     description: Daily Fitbit floors summary.
     type: measurement
@@ -239,11 +217,10 @@ emit:
         path: '@item.value'
       unit: floors
       label: intraday floors
-  # ---------------- heart rate ----------------
-  - id: heart-rate-zones
-    description: Daily heart-rate zone summary, one event per zone.
+  - id: heart-rate-zones-minutes
+    description: Heart-rate zone minutes, one event per zone.
     type: measurement
-    category: heart-rate-zone
+    category: heart-rate-zone-minutes
     granularity: daily
     when:
       field: measurementType
@@ -260,23 +237,42 @@ emit:
         path: '@item.minutes'
       unit: min
       label:
-        template: 'heart-rate zone {@item.name}'
-      components:
-        - name: zone
-          value:
-            path: '@item.name'
-        - name: min_bpm
-          value:
-            path: '@item.min'
-          unit: bpm
-        - name: max_bpm
-          value:
-            path: '@item.max'
-          unit: bpm
-        - name: caloriesOut
-          value:
-            path: '@item.caloriesOut'
-          unit: kcal
+        template: heart-rate zone minutes {@item.name}
+      extensions:
+        fitbit.name:
+          path: '@item.name'
+        fitbit.min:
+          path: '@item.min'
+        fitbit.max:
+          path: '@item.max'
+  - id: heart-rate-zones-calories
+    description: Heart-rate zone calories out, one event per zone.
+    type: measurement
+    category: heart-rate-zone-calories
+    granularity: daily
+    when:
+      field: measurementType
+      equals: heart-rate-intraday
+    iterate: measurementValue.activities-heart[0].value.heartRateZones
+    timestamp:
+      start:
+        path: measurementValue.activities-heart[0].dateTime
+        parse_timestamp: '%Y-%m-%d'
+    payload:
+      value:
+        path: '@item.caloriesOut'
+      raw_value:
+        path: '@item.caloriesOut'
+      unit: kcal
+      label:
+        template: heart-rate zone calories {@item.name}
+      extensions:
+        fitbit.name:
+          path: '@item.name'
+        fitbit.min:
+          path: '@item.min'
+        fitbit.max:
+          path: '@item.max'
   - id: heart-rate-intraday
     description: Intraday heart-rate dataset, one event per time slice.
     type: measurement
@@ -303,7 +299,6 @@ emit:
         path: '@item.value'
       unit: bpm
       label: intraday heart rate
-  # ---------------- sleep ----------------
   - id: sleep-summary
     description: Daily Fitbit sleep summary.
     type: measurement
@@ -399,6 +394,12 @@ validate:
     heart-rate-zone:
       unit_whitelist:
         - min
+    heart-rate-zone-minutes:
+      unit_whitelist:
+        - min
+    heart-rate-zone-calories:
+      unit_whitelist:
+        - kcal
     heart-rate-intraday:
       unit_whitelist:
         - bpm
@@ -430,6 +431,7 @@ fhir:
   include:
     - Patient
     - Observation
+    - Provenance
 omop:
   enabled: true
   include:

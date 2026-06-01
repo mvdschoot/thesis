@@ -257,7 +257,7 @@ export default function AdapterPanel({
                             }}
                             title={m.adapter.description}
                           >
-                            {m.adapter.description}
+                            {m.adapter.description.length > 180 ? m.adapter.description.substring(0, 180) + "..." : m.adapter.description}
                           </span>
                         )}
                         {m.error && (
