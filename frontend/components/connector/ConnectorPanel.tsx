@@ -3,18 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 
 import { cx } from "@/lib/cx";
-import { SAMPLE_DATASETS } from "@/lib/sampleData";
 import type { TransformFormat } from "@/lib/api";
 
-export type InputMode = "sample" | "custom";
+export type InputMode = "custom";
 
 const PREVIEW_MAX = 1_000;
 
 interface Props {
-  mode: InputMode;
-  setMode: (m: InputMode) => void;
-  datasetKey: string;
-  setDatasetKey: (k: string) => void;
   customText: string;
   setCustomText: (s: string) => void;
   customFormat: TransformFormat;
@@ -32,10 +27,6 @@ function formatFromFilename(name: string): TransformFormat | null {
 }
 
 export default function ConnectorPanel({
-  mode,
-  setMode,
-  datasetKey,
-  setDatasetKey,
   customText,
   setCustomText,
   customFormat,
@@ -44,18 +35,16 @@ export default function ConnectorPanel({
   setCustomSource,
   customError,
 }: Props) {
-  const ds = SAMPLE_DATASETS[datasetKey];
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [drag, setDrag] = useState(false);
 
   const previewText = useMemo(() => {
-    if (mode !== "custom") return JSON.stringify(ds.record, null, 2);
     if (!customText) return "// paste or drop a file to preview";
     if (customText.length <= PREVIEW_MAX) return customText;
     return customText.slice(0, PREVIEW_MAX) + "\n…";
-  }, [mode, ds, customText]);
+  }, [customText]);
 
-  const previewTruncated = mode === "custom" && customText.length > PREVIEW_MAX;
+  const previewTruncated = customText.length > PREVIEW_MAX;
 
   const handleFile = (file: File) => {
     const fmt = formatFromFilename(file.name);
@@ -65,7 +54,6 @@ export default function ConnectorPanel({
       if (typeof result === "string") {
         setCustomText(result);
         if (fmt) setCustomFormat(fmt);
-        setMode("custom");
       }
     };
     reader.readAsText(file);
@@ -85,85 +73,61 @@ export default function ConnectorPanel({
         <div className="card">
           <div className="card-head">
             <span className="eyebrow">Input source</span>
-            <div className="seg">
-              <button className={mode === "sample" ? "on" : ""} onClick={() => setMode("sample")}>
-                Sample
-              </button>
-              <button className={mode === "custom" ? "on" : ""} onClick={() => setMode("custom")}>
-                Custom
-              </button>
-            </div>
           </div>
           <div className="card-body">
-            {mode === "sample" ? (
-              <>
-                <div className="field">
-                  <label>Sample dataset</label>
-                  <select
-                    className="select"
-                    value={datasetKey}
-                    onChange={(e) => setDatasetKey(e.target.value)}
-                  >
-                    {Object.entries(SAMPLE_DATASETS).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v.label}
-                      </option>
-                    ))}
-                  </select>
+            <div
+              className={cx("dropzone", drag && "dragover")}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDrag(true);
+              }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrag(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleFile(f);
+              }}
+            >
+              <div style={{ fontSize: 13, marginBottom: 6 }}>
+                Drop a JSON or CSV file or click to browse
+              </div>
+              <div className="help">.json · .csv · single record, array, or table</div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json,.json,text/csv,.csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                }}
+                style={{ display: "none" }}
+              />
+            </div>
+
+            <div className="spacer-sm" />
+            <div className="field">
+              <label>Source name</label>
+              <input
+                className="input mono"
+                value={customSource}
+                placeholder="e.g. fitbit"
+                onChange={(e) => setCustomSource(e.target.value)}
+              />
+            </div>
+            <div className="help">
+              Source name is sent to the backend as the record&apos;s <span className="mono">_metadata.source</span> and is what the adapter&apos;s <span className="mono">match.source</span> compares against. Set this before generating an adapter config so the LLM knows what to write.
+            </div>
+
+            {customError && (
+              <div className="qflag err" style={{ marginTop: 12 }}>
+                <div className="qf-bar" />
+                <div>
+                  <div className="qf-code">INPUT_ERROR</div>
+                  <div className="qf-msg">{customError}</div>
                 </div>
-                <div className="spacer-sm" />
-                <div className="field">
-                  <label>Source file</label>
-                  <div className="chip mono" style={{ alignSelf: "flex-start" }}>
-                    {ds.file}
-                  </div>
-                </div>
-                <div className="spacer-sm" />
-                <div className="field">
-                  <label>Detected source name</label>
-                  <div>
-                    <span className="chip accent">{ds.source}</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div
-                  className={cx("dropzone", drag && "dragover")}
-                  onClick={() => fileRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDrag(true);
-                  }}
-                  onDragLeave={() => setDrag(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDrag(false);
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) handleFile(f);
-                  }}
-                >
-                  <div style={{ fontSize: 13, marginBottom: 6 }}>
-                    Drop a JSON or CSV file or click to browse
-                  </div>
-                  <div className="help">.json · .csv · single record, array, or table</div>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/json,.json,text/csv,.csv"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleFile(f);
-                    }}
-                    style={{ display: "none" }}
-                  />
-                </div>
-                
-                <div className="help">
-                  Source name is sent to the backend as the record&apos;s <span className="mono">_metadata.source</span> and is what the adapter&apos;s <span className="mono">match.source</span> compares against. Set this before generating an adapter config so the LLM knows what to write.
-                </div>
-                
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -171,7 +135,7 @@ export default function ConnectorPanel({
         <div className="card">
           <div className="card-head">
             <span className="eyebrow">Record preview</span>
-            <span className="chip">{mode === "custom" ? customFormat : "sample"}</span>
+            <span className="chip">{customFormat}</span>
           </div>
           <div className="card-body">
             <pre className="code-pre">{previewText}</pre>

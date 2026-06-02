@@ -7,14 +7,9 @@ import { cx } from "@/lib/cx";
 import type { AdapterConfig } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
 
-import DefaultsEditor from "./DefaultsEditor";
-import EmitEditor from "./EmitEditor";
 import LLMDialog from "./LLMDialog";
-import MatchEditor from "./MatchEditor";
 import YamlDiffEditor from "./YamlDiffEditor";
 import YamlEditor from "./YamlEditor";
-
-type Tab = "header" | "match" | "defaults" | "emit";
 
 interface Props {
   config: AdapterConfig | null;
@@ -29,9 +24,6 @@ interface Props {
   loading?: boolean;
   loadError?: string | null;
   matches?: ConfigMatch[] | null;
-  /** Show the YAML editor on first render (used when StageRulesPanel sends
-   * the user here to edit a non-adapter section). */
-  initialYamlMode?: boolean;
 }
 
 export default function AdapterPanel({
@@ -46,15 +38,11 @@ export default function AdapterPanel({
   loading,
   loadError,
   matches,
-  initialYamlMode,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("match");
-  const [showYaml, setShowYaml] = useState(initialYamlMode === true);
-  const [emitIdx, setEmitIdx] = useState(0);
   const [showLLM, setShowLLM] = useState(false);
   const [openDescriptor, setOpenDescriptor] = useState<string | null>(null);
 
-  // YAML editor state — only meaningful while showYaml is true.
+  // YAML editor state.
   const [yamlText, setYamlText] = useState<string>("");
   const [yamlError, setYamlError] = useState<string | null>(null);
   const [savedYaml, setSavedYaml] = useState<string>("");
@@ -73,7 +61,7 @@ export default function AdapterPanel({
   // or the active config changes. The parsed config is the source of truth in
   // visual mode; flipping into YAML mode regenerates the on-disk shape.
   useEffect(() => {
-    if (!showYaml || !config) return;
+    if (!config) return;
     const text = dumpAdapterYaml(config);
     setYamlText(text);
     setSavedYaml(text);
@@ -84,11 +72,9 @@ export default function AdapterPanel({
     setShowEditBox(false);
     setInstruction("");
     setEditError(null);
-    // We want this to fire on entering YAML mode or when the user picks a
-    // different config — not on every visual edit (those are reflected via the
-    // re-seed-on-toggle path).
+    // Re-seed the buffer when the user picks a different config.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showYaml, configKey]);
+  }, [configKey]);
 
   // Auto-clear "Saved" toast after 2s.
   useEffect(() => {
@@ -109,7 +95,7 @@ export default function AdapterPanel({
   };
 
   const dirty = yamlText !== savedYaml;
-  const canSave = showYaml && !yamlError && dirty && !saving && config != null;
+  const canSave = !yamlError && dirty && !saving && config != null;
 
   async function handleSave() {
     if (!canSave) return;
@@ -157,7 +143,7 @@ export default function AdapterPanel({
   return (
     <div>
       <div className="section-sub">Stage 02 · Tier-1 YAML adapter</div>
-      <h2 className="section-title">Adapter</h2>
+      <h2 className="section-title">Config</h2>
       <p className="muted" style={{ maxWidth: 700, marginTop: 0 }}>
         A config-driven adapter shapes raw records into{" "}
         <span className="mono">CanonicalEvent</span>s. No source-specific Python — every adapter is YAML.
@@ -186,9 +172,6 @@ export default function AdapterPanel({
               }}
             />
             Generate with LLM
-          </button>
-          <button className="btn" onClick={() => setShowYaml((s) => !s)}>
-            {showYaml ? "Visual" : "YAML"}
           </button>
         </div>
       </div>
@@ -290,92 +273,60 @@ export default function AdapterPanel({
       ) : (
         <div className="card">
           <div className="card-head" style={{ padding: "0 18px" }}>
-            {showYaml ? (
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 0",
-                }}
-              >
-                <span className="eyebrow" style={{ margin: 0 }}>
-                  {configKey}.yaml · full file
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 0",
+              }}
+            >
+              <span className="eyebrow" style={{ margin: 0 }}>
+                {configKey}.yaml · full file
+              </span>
+              {yamlError ? (
+                <span className="chip" style={{ color: "var(--err)", borderColor: "var(--err)" }}>
+                  parse error
                 </span>
-                {yamlError ? (
-                  <span className="chip" style={{ color: "var(--err)", borderColor: "var(--err)" }}>
-                    parse error
-                  </span>
-                ) : dirty ? (
-                  <span className="chip">unsaved</span>
-                ) : savedAt ? (
-                  <span className="chip" style={{ color: "var(--accent)" }}>
-                    saved
-                  </span>
-                ) : null}
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                  <button
-                    className="btn"
-                    onClick={() => setShowEditBox((s) => !s)}
-                    disabled={editing || proposed !== null}
-                    title="Describe a change in natural language and let the LLM rewrite the YAML."
-                  >
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        background: "var(--accent)",
-                      }}
-                    />
-                    Edit with AI
-                  </button>
-                  <button
-                    className={cx("btn", canSave && "primary")}
-                    disabled={!canSave}
-                    onClick={handleSave}
-                  >
-                    {saving ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="tabs" style={{ flex: 1, border: "none" }}>
+              ) : dirty ? (
+                <span className="chip">unsaved</span>
+              ) : savedAt ? (
+                <span className="chip" style={{ color: "var(--accent)" }}>
+                  saved
+                </span>
+              ) : null}
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                 <button
-                  className={cx("tab", tab === "match" && "active")}
-                  onClick={() => setTab("match")}
+                  className="btn"
+                  onClick={() => setShowEditBox((s) => !s)}
+                  disabled={editing || proposed !== null}
+                  title="Describe a change in natural language and let the LLM rewrite the YAML."
                 >
-                  match
-                  <span className="badge">{config.match.record.length}</span>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "var(--accent)",
+                    }}
+                  />
+                  Edit with AI
                 </button>
                 <button
-                  className={cx("tab", tab === "defaults" && "active")}
-                  onClick={() => setTab("defaults")}
+                  className={cx("btn", canSave && "primary")}
+                  disabled={!canSave}
+                  onClick={handleSave}
                 >
-                  defaults
-                </button>
-                <button
-                  className={cx("tab", tab === "emit" && "active")}
-                  onClick={() => setTab("emit")}
-                >
-                  emit
-                  <span className="badge">{config.emit.length}</span>
-                </button>
-                <button
-                  className={cx("tab", tab === "header" && "active")}
-                  onClick={() => setTab("header")}
-                >
-                  adapter header
+                  {saving ? "Saving…" : "Save"}
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
           <div className="card-body">
-            {showYaml ? (
-              <>
+            <>
                 {showEditBox && proposed === null && (
                   <div style={{ marginBottom: 12 }}>
                     <textarea
@@ -474,97 +425,7 @@ export default function AdapterPanel({
                     </div>
                   </>
                 )}
-              </>
-            ) : (
-              <>
-                {tab === "header" && (
-                  <div>
-                    <div className="row">
-                      <div className="field">
-                        <label>id</label>
-                        <input
-                          className="input mono"
-                          value={config.adapter.id}
-                          onChange={(e) =>
-                            onChange({
-                              ...config,
-                              adapter: { ...config.adapter, id: e.target.value },
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="field">
-                        <label>version</label>
-                        <input
-                          className="input mono"
-                          value={config.adapter.version}
-                          onChange={(e) =>
-                            onChange({
-                              ...config,
-                              adapter: { ...config.adapter, version: e.target.value },
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="spacer-sm" />
-                    <div className="field">
-                      <label>description</label>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={config.adapter.description ?? ""}
-                        onChange={(e) =>
-                          onChange({
-                            ...config,
-                            adapter: { ...config.adapter, description: e.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
-                {tab === "match" && (
-                  <MatchEditor
-                    match={config.match}
-                    onChange={(m) => onChange({ ...config, match: m })}
-                  />
-                )}
-                {tab === "defaults" && (
-                  <DefaultsEditor
-                    defaults={config.defaults}
-                    onChange={(d) => onChange({ ...config, defaults: d })}
-                  />
-                )}
-                {tab === "emit" && (
-                  <div>
-                    <div
-                      className="tabs"
-                      style={{ marginBottom: 18, borderBottom: "1px solid var(--line)" }}
-                    >
-                      {config.emit.map((rule, i) => (
-                        <button
-                          key={rule.id}
-                          className={cx("tab", emitIdx === i && "active")}
-                          onClick={() => setEmitIdx(i)}
-                        >
-                          {rule.id}
-                          {rule.iterate && <span className="badge">iter</span>}
-                        </button>
-                      ))}
-                    </div>
-                    <EmitEditor
-                      emit={config.emit[emitIdx]}
-                      onChange={(emit) => {
-                        const arr = [...config.emit];
-                        arr[emitIdx] = emit;
-                        onChange({ ...config, emit: arr });
-                      }}
-                    />
-                  </div>
-                )}
-              </>
-            )}
+            </>
           </div>
         </div>
       )}

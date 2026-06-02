@@ -1,13 +1,10 @@
 "use client";
 
-const STAGE_ORDER = ["connector", "adapter", "cleaning", "validation", "qualification", "results"] as const;
+const STAGE_ORDER = ["connector", "adapter", "results"] as const;
 
 const LABEL: Record<(typeof STAGE_ORDER)[number], string> = {
   connector: "Connector",
-  adapter: "Adapter",
-  cleaning: "Cleaner",
-  validation: "Validator",
-  qualification: "Qualifier",
+  adapter: "Config",
   results: "Results",
 };
 

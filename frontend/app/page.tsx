@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AdapterPanel from "@/components/adapter/AdapterPanel";
-import ConnectorPanel, { type InputMode } from "@/components/connector/ConnectorPanel";
+import ConnectorPanel from "@/components/connector/ConnectorPanel";
 import FhirServerPanel from "@/components/fhir/FhirServerPanel";
 import PipelineNav from "@/components/PipelineNav";
 import ResultsPanel from "@/components/results/ResultsPanel";
-import StageRulesPanel from "@/components/StageRulesPanel";
 import StageStrip, { type StageDef } from "@/components/StageStrip";
 import Topbar from "@/components/Topbar";
 import {
@@ -30,26 +29,14 @@ import {
   CONCEPT_SCAN_THRESHOLD,
   type BatchProgress,
 } from "@/lib/batch";
-import { summarizeClean, summarizeQualify, summarizeValidate } from "@/lib/rules";
-import { SAMPLE_CONFIGS, SAMPLE_DATASETS, SIMULATED_EVENTS } from "@/lib/sampleData";
+import { SAMPLE_CONFIGS, SIMULATED_EVENTS } from "@/lib/sampleData";
 import type { AdapterConfig, CanonicalEvent, Coding } from "@/lib/types";
 import { dumpAdapterYaml, parseAdapterYaml } from "@/lib/yaml";
 
 const SAMPLE_CONFIG_KEYS = Object.keys(SAMPLE_CONFIGS);
 
-const SAMPLE_RAW = { value: " 244 ", unit: null, timestamp: "2025-01-12T06:04:00Z", category: "heart-rate" };
-const SAMPLE_CLEANED = { value: 244, unit: "bpm", timestamp: "2025-01-12T06:04:00.000Z", category: "heart-rate" };
-const SAMPLE_VALIDATED = { ...SAMPLE_CLEANED, _flags: ["HR_OUT_OF_RANGE"] };
-const SAMPLE_QUALIFIED = {
-  ...SAMPLE_CLEANED,
-  plausibility: "review",
-  completeness: 1.0,
-};
-
 export default function Page() {
-  // Connector state
-  const [inputMode, setInputMode] = useState<InputMode>("sample");
-  const [datasetKey, setDatasetKey] = useState<string>(Object.keys(SAMPLE_DATASETS)[0]);
+  // Connector state — upload-only (JSON or CSV).
   const [customText, setCustomText] = useState<string>("");
   // Debounced copy of customText so JSON.parse / matchConfigs don't run on
   // every keystroke when the user pastes a multi-MB blob.
@@ -74,10 +61,6 @@ export default function Page() {
 
   // Stage navigation
   const [activeStage, setActiveStage] = useState<string>("connector");
-
-  // When the user clicks "Edit in YAML →" inside a StageRulesPanel we hop to
-  // the adapter stage and ask it to start in YAML mode.
-  const [adapterYamlIntent, setAdapterYamlIntent] = useState(0);
 
   // Run state
   const [runResult, setRunResult] = useState<TransformResponse | null>(null);
@@ -169,17 +152,14 @@ export default function Page() {
     }
   };
 
-  // The active payload format. Sample datasets are always JSON.
-  const activeFormat: TransformFormat = inputMode === "sample" ? "json" : customFormat;
+  // The active payload format — driven by the uploaded file's extension.
+  const activeFormat: TransformFormat = customFormat;
 
   // ── Resolve the input data for transform.
   // For JSON: parsed object/array. For CSV: raw text passed through to the backend.
   // Reads from the debounced text so a paste of multi-MB JSON doesn't re-parse
   // on every keystroke.
   const inputData: unknown | null = useMemo(() => {
-    if (inputMode === "sample") {
-      return SAMPLE_DATASETS[datasetKey]?.record ?? null;
-    }
     if (!debouncedCustomText.trim()) return null;
     if (customFormat === "csv") return debouncedCustomText;
     try {
@@ -187,24 +167,19 @@ export default function Page() {
     } catch {
       return null;
     }
-  }, [inputMode, datasetKey, debouncedCustomText, customFormat]);
+  }, [debouncedCustomText, customFormat]);
 
   // String form of inputData for endpoints that parse server-side (e.g.
-  // /configs/match). For custom input we already have the raw text — skip
-  // re-stringifying the parsed JSON (a wasted full pass on large payloads).
+  // /configs/match). We already have the raw text — skip re-stringifying the
+  // parsed JSON (a wasted full pass on large payloads).
   const inputDataString: string | null = useMemo(() => {
-    if (inputMode === "custom") {
-      return debouncedCustomText.trim() ? debouncedCustomText : null;
-    }
-    if (inputData == null) return null;
-    if (typeof inputData === "string") return inputData;
-    return JSON.stringify(inputData);
-  }, [inputMode, debouncedCustomText, inputData]);
+    return debouncedCustomText.trim() ? debouncedCustomText : null;
+  }, [debouncedCustomText]);
 
   // Validate custom payload for user feedback (non-blocking). Reads from the
   // debounced text so we don't JSON.parse a multi-MB blob on each keystroke.
   useEffect(() => {
-    if (inputMode !== "custom" || !debouncedCustomText.trim()) {
+    if (!debouncedCustomText.trim()) {
       setCustomError(null);
       return;
     }
@@ -224,17 +199,14 @@ export default function Page() {
     } catch (e) {
       setCustomError(`Invalid JSON: ${(e as Error).message}`);
     }
-  }, [debouncedCustomText, inputMode, customFormat]);
+  }, [debouncedCustomText, customFormat]);
 
   // Source name describes the *data*, not the adapter. In sample mode it comes
   // from the fixture; in custom mode the user owns it. Don't fall back to the
   // currently-selected adapter's source — that's how an unrelated adapter's
   // `match.source` (e.g. "app-usage") leaks into transform requests and into
   // LLM-generated configs for other data.
-  const sourceName = useMemo(() => {
-    if (inputMode === "sample") return SAMPLE_DATASETS[datasetKey]?.source ?? "";
-    return customSource.trim();
-  }, [inputMode, datasetKey, customSource]);
+  const sourceName = useMemo(() => customSource.trim(), [customSource]);
 
   // Reset scan phase whenever pipeline inputs change.
   useEffect(() => { setScanPhase(false); }, [inputData, configKey, activeFormat]);
@@ -308,10 +280,6 @@ export default function Page() {
     }
   };
 
-  const cleanSummary = useMemo(() => summarizeClean(config), [config]);
-  const validateSummary = useMemo(() => summarizeValidate(config), [config]);
-  const qualifySummary = useMemo(() => summarizeQualify(config), [config]);
-
   // Single O(n) pass over events for the stage-strip flag counters. Kept
   // separate from stageDefs so flipping stages / editing the YAML doesn't
   // retraverse the event list.
@@ -331,56 +299,36 @@ export default function Page() {
     const total = events.length;
     const { warn, err } = flagTotals;
     const emitCount = config?.emit.length ?? 0;
-    const cleanOn = cleanSummary.filter((r) => r.enabled).length;
-    const validateOn = validateSummary.filter((r) => r.enabled).length;
-    const qualifyOn = qualifySummary.filter((r) => r.enabled).length;
-    // Strip stays at 5 stages to match the CSS grid (Results is reached via prev/next nav).
+    // Strip is Connector → Adapter → Results (3 columns, matches the CSS grid).
     return [
       {
         id: "connector",
         label: "Connector",
         count: 1,
-        note: "1 record · sample",
+        note: "upload",
         done: activeStage !== "connector",
         pulse: activeStage === "connector",
       },
       {
         id: "adapter",
-        label: "Adapter",
+        label: "Config",
         count: total,
         note: `${emitCount} emit rules`,
-        done: ["cleaning", "validation", "qualification", "results"].includes(activeStage),
+        done: activeStage === "results",
         pulse: activeStage === "adapter",
       },
       {
-        id: "cleaning",
-        label: "Cleaner",
+        id: "results",
+        label: "Results",
         count: total,
-        note: `${cleanOn}/${cleanSummary.length} rules on`,
-        done: ["validation", "qualification", "results"].includes(activeStage),
-        pulse: activeStage === "cleaning",
-      },
-      {
-        id: "validation",
-        label: "Validator",
-        count: total,
-        note: `${validateOn}/${validateSummary.length} rules on`,
-        warn,
-        done: ["qualification", "results"].includes(activeStage),
-        pulse: activeStage === "validation",
-      },
-      {
-        id: "qualification",
-        label: "Qualifier",
-        count: total,
-        note: `${qualifyOn}/${qualifySummary.length} rules on`,
+        note: "FHIR · OMOP",
         warn,
         err,
-        done: activeStage === "results",
-        pulse: activeStage === "qualification",
+        done: false,
+        pulse: activeStage === "results",
       },
     ];
-  }, [events, flagTotals, activeStage, config, cleanSummary, validateSummary, qualifySummary]);
+  }, [events, flagTotals, activeStage, config]);
 
   const canRun = inputData != null && config != null;
 
@@ -577,13 +525,6 @@ export default function Page() {
     return Array.from(merged);
   }, [backendIds]);
 
-  // Hop the user to the YAML editor on the adapter stage with a fresh intent
-  // counter so AdapterPanel re-mounts in YAML mode every time.
-  const editYaml = () => {
-    setAdapterYamlIntent((n) => n + 1);
-    setActiveStage("adapter");
-  };
-
   // The FHIR Server dashboard is a top-level destination outside the linear
   // pipeline. Toggling returns to whichever stage the user came from.
   const lastStageRef = useRef<string>("results");
@@ -634,10 +575,6 @@ export default function Page() {
 
         {activeStage === "connector" && (
           <ConnectorPanel
-            mode={inputMode}
-            setMode={setInputMode}
-            datasetKey={datasetKey}
-            setDatasetKey={setDatasetKey}
             customText={customText}
             setCustomText={setCustomText}
             customFormat={customFormat}
@@ -650,7 +587,6 @@ export default function Page() {
 
         {activeStage === "adapter" && (
           <AdapterPanel
-            key={`adapter-${adapterYamlIntent}`}
             config={config}
             onChange={setConfig}
             configKey={configKey}
@@ -662,62 +598,6 @@ export default function Page() {
             loading={adapterLoading}
             loadError={adapterError}
             matches={configMatches}
-            initialYamlMode={adapterYamlIntent > 0}
-          />
-        )}
-
-        {activeStage === "cleaning" && (
-          <StageRulesPanel
-            title="Cleaner"
-            eyebrow="Stage 03 · Heuristic cleaning"
-            blurb="Whitespace strip → Timestamp normalize → Type coerce → Unit infer. Each heuristic mutates the event in place; fail-soft, no flags raised. Stage advances to CLEANED."
-            summary={cleanSummary}
-            sectionKey="clean"
-            onEditYaml={editYaml}
-            sample={SAMPLE_RAW}
-            sampleAfter={SAMPLE_CLEANED}
-          />
-        )}
-
-        {activeStage === "validation" && (
-          <StageRulesPanel
-            title="Validator"
-            eyebrow="Stage 04 · Assertions only"
-            blurb="Validators ASSERT — they never mutate. Each returns a list of QualityFlags; the runner appends and de-dups against adapter-declared flags. Failed validation events are tagged, not dropped."
-            summary={validateSummary}
-            sectionKey="validate"
-            onEditYaml={editYaml}
-            sample={SAMPLE_CLEANED}
-            sampleAfter={SAMPLE_VALIDATED}
-            sampleFlags={[
-              {
-                code: "HR_OUT_OF_RANGE",
-                severity: "warning",
-                stage: "validated",
-                message: "value 244 outside [25, 230] for heart-rate",
-              },
-            ]}
-          />
-        )}
-
-        {activeStage === "qualification" && (
-          <StageRulesPanel
-            title="Qualifier"
-            eyebrow="Stage 05 · Cross-event quality"
-            blurb="Operates over the request's events as a batch. Computes completeness, fingerprints duplicates, and runs Hampel outlier (median ± 3.5·MAD per (subject_id, category), min n=5). Derives conformance + plausibility."
-            summary={qualifySummary}
-            sectionKey="qualify"
-            onEditYaml={editYaml}
-            sample={SAMPLE_VALIDATED}
-            sampleAfter={SAMPLE_QUALIFIED}
-            sampleFlags={[
-              {
-                code: "HAMPEL_OUTLIER",
-                severity: "warning",
-                stage: "qualified",
-                message: "Hampel: |x − median| > 3.5·MAD for (u-08431, heart-rate)",
-              },
-            ]}
           />
         )}
 

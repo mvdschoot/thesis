@@ -55,6 +55,9 @@ button { font: inherit; color: inherit; }
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto auto 1fr;
+  /* Cap the column so wide children (e.g. OMOP tables) scroll inside their own
+     overflow container instead of forcing the whole page to scroll sideways. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .topbar {
@@ -109,14 +112,16 @@ button { font: inherit; color: inherit; }
 
 /* === Stage strip === */
 .stages {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 24px;
   padding: 18px 28px 22px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-2);
   position: relative;
 }
+.stage:last-child { align-items: flex-end; text-align: right; padding-right: 0; padding-left: 14px; }
 .stages::before {
   content: "";
   position: absolute;
@@ -199,7 +204,7 @@ button { font: inherit; color: inherit; }
 /* === Main grid === */
 .main {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   padding: 28px 28px 60px;
   max-width: 1500px;
