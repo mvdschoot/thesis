@@ -68,6 +68,24 @@ export default function ResultsPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = events.find((e) => e.event_id === selectedId) ?? null;
 
+  const [showJson, setShowJson] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  const eventsJson = useMemo(
+    () => JSON.stringify(events.slice(0, 5), null, 2),
+    [events],
+  );
+
+  function copyJson() {
+    void navigator.clipboard?.writeText(eventsJson).then(
+      () => {
+        setCopiedJson(true);
+        setTimeout(() => setCopiedJson(false), 1400);
+      },
+      () => setCopiedJson(false),
+    );
+  }
+
   const unboundCount = useMemo(
     () =>
       conceptSlots.filter(
@@ -177,6 +195,31 @@ export default function ResultsPanel({
       {view === "events" && (
         <>
           <EventStats events={events} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0" }}>
+            <button
+              className={cx("btn", showJson && "primary")}
+              onClick={() => setShowJson((v) => !v)}
+              disabled={events.length === 0}
+              title="Show the raw canonical-event JSON (first 5)"
+            >
+              {showJson ? "Hide JSON" : "Show JSON"}
+            </button>
+            {showJson && events.length > 0 && (
+              <button className="btn ghost" onClick={copyJson}>
+                {copiedJson ? "Copied ✓" : "Copy"}
+              </button>
+            )}
+            {events.length > 5 && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                showing first 5 of {events.length}
+              </span>
+            )}
+          </div>
+          {showJson && events.length > 0 && (
+            <pre className="code-pre" style={{ marginBottom: 14 }}>
+              {eventsJson}
+            </pre>
+          )}
           {events.length === 0 && adapterDiagnostics && (
             <div className="card" style={{ marginTop: 16, padding: "12px 16px" }}>
               <div style={{ fontSize: 13 }}>
