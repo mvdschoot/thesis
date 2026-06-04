@@ -54,8 +54,8 @@ Top-level sections:
 - `clean` (optional): cleaner chain composition + per-heuristic params. Omitted → default chain.
 - `validate` (optional): which validators run + per-category overlay on top of the global quality_rules.yaml. Omitted → all validators, global rules.
 - `qualify` (optional): which cross-event checks run + tunables (Hampel k, fingerprint fields, plausibility threshold). Omitted → all checks with defaults.
-- `fhir` (optional): toggles + bundle shape for the FHIR R4 output stage. Omitted → FHIR output enabled with sensible defaults (Patient + Observation, transaction bundle).
-- `omop` (optional): toggles + table selection for the OMOP CDM v5.4 output. Omitted → OMOP CDM output enabled with sensible defaults (all tables).
+- `fhir` (optional): toggles + bundle shape for the FHIR R4 output stage. OMIT THIS BLOCK BY DEFAULT — omission already produces the full FHIR output with all defaults (Patient + Observation + Questionnaire, transaction bundle). Only include it when the user EXPLICITLY asks for something non-default (e.g. add a Provenance or Device resource, drop a resource, or switch to a collection bundle).
+- `omop` (optional): toggles + table selection for the OMOP CDM v5.4 output. OMIT THIS BLOCK BY DEFAULT — omission already produces the full OMOP CDM output with all five tables. Only include it when the user EXPLICITLY asks to disable a table or otherwise deviate.
 
 Match-block rigidity (MANDATORY):
 - Do NOT rely on `match.source` alone — that lets the engine try to transform records you can't actually handle. For every config you generate, the `record` list MUST:
@@ -133,7 +133,7 @@ Qualifier block (`qualify`):
 - `plausibility: { warning_count_for_review: 1 }` — number of WARNING flags after which `quality.plausibility` becomes `"review"`. Any ERROR forces `"exclude"` regardless.
 - `completeness: { expected_fields: { <category>: [<paths>] } }` — overrides per-category expected_fields when computing the completeness ratio.
 
-FHIR block (`fhir`):
+FHIR block (`fhir`): OMIT ENTIRELY unless the user explicitly requested a non-default FHIR output. The keys below document what the block can contain WHEN it is needed — they are not a checklist to fill in for every config.
 - `enabled: true | false` — when false, the pipeline returns no bundle. Default: true.
 - `bundle_type: transaction | collection` — `transaction` adds `entry.request.method/url` and is suitable for POST-ing to a FHIR server. `collection` omits the request slice. Default: `transaction`.
 - `include`: subset of `[Patient, Observation, Device, Provenance, Questionnaire]`. Default: `[Patient, Observation, Questionnaire]`. Add `Device` when `context.device` is meaningful in the sample, and `Provenance` when the user explicitly wants an audit trail attached to the bundle. `Questionnaire` emits one definition resource per unique survey category — each `QuestionnaireResponse` links back to it.
@@ -144,7 +144,7 @@ FHIR block (`fhir`):
     - `payload.value` is mapped to `valueQuantity` (numeric) / `valueBoolean` / `valueString`. `payload.components[]` becomes `Observation.component[]` or `QuestionnaireResponse.item[]`.
     - Subject + Device + Observation references are stable UUID5 derivations of `subject_id`, `(source, device)`, and `event_id` respectively — re-running the pipeline produces identical bundle URIs.
 
-OMOP CDM block (`omop`):
+OMOP CDM block (`omop`): OMIT ENTIRELY unless the user explicitly requested a non-default OMOP output. The keys below document what the block can contain WHEN it is needed — they are not a checklist to fill in for every config.
 - `enabled: true | false` — when false, the pipeline returns no OMOP CDM tables. Default: true.
 - `include`: subset of `[person, measurement, observation, device_exposure, observation_period]`. Default: all five tables.
     - `person` — one row per unique `subject_id`. Demographics are unknown for wearable data (concept_id=0).
@@ -159,10 +159,10 @@ OMOP CDM block (`omop`):
     - Events with `quality.plausibility="exclude"` are skipped entirely.
     - Unmapped events (concept_id=0) are still emitted — OMOP convention — and tracked in a separate `unmapped` audit list.
     - `payload.components[]` (e.g. blood pressure systolic/diastolic) become separate rows in the target table.
-- Always include the `omop:` block when you include a `fhir:` block.
 
 Defaults & omission rule:
 - Every block, every nested key, every parameter is optional. Omitted = current default behavior.
+- Prefer the SMALLEST config that works. The `fhir:` and `omop:` blocks should be ABSENT from almost every config you generate — their defaults (output enabled, all standard resources/tables) are already what you want, and omitting them keeps the config readable. Add them ONLY in direct response to an explicit user instruction to change the output (e.g. "include a Provenance resource", "don't emit OMOP", "use a collection bundle").
 - If you cannot infer a parameter from the input sample, OMIT it. Do not invent thresholds. The defaults are statistically defensible and match the existing pipeline behavior.
 - Only emit a per-category override under `validate.categories` when the source genuinely needs to deviate from the global `quality_rules.yaml` (e.g. a new unit or a different range). Otherwise leave the global rule in charge.
 

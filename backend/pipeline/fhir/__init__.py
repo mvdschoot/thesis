@@ -6,8 +6,10 @@ plus a stats dict whose ``"fhir"`` key carries the bundle, resource count,
 and serialized size — the orchestrator hoists this onto the top-level
 :class:`api.models.TransformResponse.bundle` field for the frontend.
 
-When ``config`` is ``None`` or ``config.enabled is False``, this is a
-no-op: events pass through untouched and ``stats["fhir"]`` is ``None``.
+When ``config`` is ``None`` (the ``fhir:`` block was omitted) the stage runs
+with default settings — FHIR output is *enabled* by default. Only an explicit
+``fhir.enabled: false`` makes this a no-op (events pass through untouched and
+``stats["fhir"]`` is ``None``).
 """
 from __future__ import annotations
 
@@ -29,7 +31,11 @@ def run(
     *,
     config: FhirConfig | None = None,
 ) -> tuple[list[CanonicalEvent], dict[str, Any]]:
-    if config is None or not config.enabled:
+    # An omitted `fhir:` block (config is None) means "run with defaults" —
+    # FHIR output is on by default. Only an explicit enabled: false disables it.
+    if config is None:
+        config = FhirConfig()
+    if not config.enabled:
         return events, {"fhir": None}
 
     bundle = build_bundle(events, config=config)

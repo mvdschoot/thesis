@@ -1,5 +1,6 @@
 sample_data
 transform_outputs
+docs
 
 .vscode
 .claude
@@ -28,3 +29,4 @@ out/
 # Local runs
 transformation_results/
 *.tmp
+.Rproj.user

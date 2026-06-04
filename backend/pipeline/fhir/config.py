@@ -1,9 +1,10 @@
 """Parsed `fhir:` block from the YAML pipeline config.
 
 Empty / missing block → ``None``, which the FHIR runtime interprets as
-"FHIR output disabled — return an empty bundle and leave events at their
-existing stage." Present block → :class:`FhirConfig` instance with closed-enum
-validation on ``bundle_type`` and ``include``.
+"run with default settings" — FHIR output is enabled by default (see
+:func:`pipeline.fhir.run`). Present block → :class:`FhirConfig` instance with
+closed-enum validation on ``bundle_type`` and ``include``; an explicit
+``enabled: false`` is the only way to disable the stage.
 """
 from __future__ import annotations
 

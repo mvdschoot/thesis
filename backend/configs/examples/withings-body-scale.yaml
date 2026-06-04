@@ -128,11 +128,6 @@ qualify:
   duplicates:  { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
   plausibility: { warning_count_for_review: 1 }
 
-fhir:
-  enabled: true
-  bundle_type: transaction
-  include: [Patient, Observation, Device, Provenance]
-
-omop:
-  enabled: true
-  include: [person, measurement, observation, device_exposure, observation_period]
+# No fhir:/omop: blocks — omitting them enables both output stages with all
+# defaults. Add them only to deviate (disable a stage/table, add a Provenance or
+# Device resource, switch bundle type, etc.).

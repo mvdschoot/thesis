@@ -34,6 +34,14 @@ export default function YamlDiffEditor({ original, modified, height = 520 }: Pro
         language="yaml"
         original={original}
         modified={modified}
+        // Don't let @monaco-editor/react dispose the underlying TextModels when
+        // the diff unmounts (e.g. on Apply/Discard). The wrapper disposes them
+        // in an order that trips Monaco's "TextModel got disposed before
+        // DiffEditorWidget model got reset" assertion. Keeping the models lets
+        // the editor reset cleanly; the small per-diff model retention is
+        // negligible for this occasional AI-proposal view.
+        keepCurrentOriginalModel
+        keepCurrentModifiedModel
         options={{
           minimap: { enabled: false },
           fontSize: 12,

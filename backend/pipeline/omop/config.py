@@ -1,8 +1,10 @@
 """Parsed ``omop:`` block from the YAML pipeline config.
 
 Empty / missing block → ``None``, which the OMOP runtime interprets as
-"OMOP CDM output disabled — return events unchanged with stats['omop']=None."
-Present block → :class:`OmopConfig` with closed-enum validation on ``include``.
+"run with default settings" — OMOP CDM output is enabled by default (see
+:func:`pipeline.omop.run`). Present block → :class:`OmopConfig` with closed-enum
+validation on ``include``; an explicit ``enabled: false`` is the only way to
+disable the stage.
 """
 from __future__ import annotations
 

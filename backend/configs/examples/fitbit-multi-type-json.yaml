@@ -103,16 +103,5 @@ validate:
     calories:
       unit_whitelist:
         - kcal
-fhir:
-  enabled: true
-  bundle_type: transaction
-  include:
-    - Patient
-    - Observation
-omop:
-  enabled: true
-  include:
-    - person
-    - measurement
-    - observation
-    - observation_period
+# No fhir:/omop: blocks — omitting them enables both output stages with all
+# defaults. Add them only to deviate from those defaults.

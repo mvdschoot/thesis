@@ -5,8 +5,10 @@ the same MAPPED canonical events and produce their output in the stats
 dict.  The orchestrator hoists ``stats["omop"]`` onto the top-level
 :pyattr:`api.models.TransformResponse.omop_cdm` field.
 
-When ``config`` is ``None`` or ``config.enabled is False``, this is a
-no-op: events pass through untouched and ``stats["omop"]`` is ``None``.
+When ``config`` is ``None`` (the ``omop:`` block was omitted) the stage runs
+with default settings — OMOP CDM output is *enabled* by default. Only an explicit
+``omop.enabled: false`` makes this a no-op (events pass through untouched and
+``stats["omop"]`` is ``None``).
 """
 from __future__ import annotations
 
@@ -28,7 +30,11 @@ def run(
     *,
     config: OmopConfig | None = None,
 ) -> tuple[list[CanonicalEvent], dict[str, Any]]:
-    if config is None or not config.enabled:
+    # An omitted `omop:` block (config is None) means "run with defaults" —
+    # OMOP output is on by default. Only an explicit enabled: false disables it.
+    if config is None:
+        config = OmopConfig()
+    if not config.enabled:
         return events, {"omop": None}
 
     cdm = build_cdm(events, config=config)

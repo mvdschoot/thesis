@@ -1,0 +1,125 @@
+adapter:
+  id: serious-game-export-v1
+  version: 1.0.0
+  description: >-
+    Exported serious game session records where score is the primary variable and related gameplay fields are captured
+    as components.
+match:
+  source: serious-game
+  record:
+    - field: .
+      type: object
+    - field: group
+      exists: true
+    - field: score
+      exists: true
+    - field: status
+      exists: true
+    - field: activity
+      exists: true
+    - field: resourceId
+      exists: true
+    - field: allowedTime
+      exists: true
+    - field: wrongAnswers
+      exists: true
+    - field: timeRemaining
+      exists: true
+    - field: correctAnswers
+      exists: true
+defaults:
+  subject_id:
+    template: respondent:{@record_index}
+  context:
+    source: serious-game
+    modality: game
+    device: null
+    source_measurement_type: game session score
+  stage: structured
+  source_record_id:
+    template: serious-game:{@record_index}:{resourceId}
+emit:
+  - id: serious-game-score
+    description: One event per game record with score as the headline value and other gameplay fields preserved as components.
+    type: measurement
+    category: game-score
+    granularity: session
+    timestamp:
+      start: '1970-01-01T00:00:00Z'
+    payload:
+      value:
+        path: score
+      raw_value:
+        path: score
+      unit: null
+      label: score
+      components:
+        - name: group
+          value:
+            path: group
+        - name: status
+          value:
+            path: status
+        - name: activity
+          value:
+            path: activity
+        - name: resourceId
+          value:
+            path: resourceId
+        - name: allowedTime
+          value:
+            path: allowedTime
+          unit: s
+        - name: wrongAnswers
+          value:
+            path: wrongAnswers
+        - name: timeRemaining
+          value:
+            path: timeRemaining
+          unit: s
+        - name: correctAnswers
+          value:
+            path: correctAnswers
+    extensions:
+      serious-game.resourceId:
+        path: resourceId
+clean:
+  heuristics:
+    - whitespace
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - payload_shape
+    - unit_whitelist
+    - range
+  categories:
+    game-score:
+      unit_whitelist:
+        - '%'
+      range:
+        min: 0
+        max: 100
+        on_violation:
+          severity: warning
+          code: SCORE_OUT_OF_RANGE
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  outliers:
+    hampel_k: 3.5
+    min_group_size: 5
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
