@@ -49,7 +49,7 @@ Top-level sections:
       - `exists: true | false` — true: value is not null / present; false: value is null or missing
       - `type: "object" | "array" | "string" | "number" | "integer" | "boolean" | "null"`
       - `non_empty: true`      — arrays/strings/objects must have length > 0
-- `defaults` (optional): { subject_id, context, stage, source_record_id } — applied to every emitted event.
+- `defaults` (optional block, but `subject_id` is MANDATORY): { subject_id, context, stage, source_record_id } — applied to every emitted event. `subject_id` must always resolve to a non-null value; see "Subject ID (MANDATORY)" below.
 - `emit`: a list of rules. Each rule produces 0..n events per input record.
 - `clean` (optional): cleaner chain composition + per-heuristic params. Omitted → default chain.
 - `validate` (optional): which validators run + per-category overlay on top of the global quality_rules.yaml. Omitted → all validators, global rules.
@@ -107,6 +107,12 @@ Rule structure:
 - quality: { flags: [...] }. Each flag is either an unconditional `{ code, severity, stage, message }` or a conditional `{ condition: { path, equals }, code, severity, stage, message }`.
 
 If the source has no per-record timestamp at all, declare a literal ISO-8601 string at `timestamp.start` and add an unconditional `SYNTHETIC_TIMESTAMP` quality flag.
+
+Subject ID (MANDATORY) — every emitted event MUST have a non-null `subject_id`. NEVER omit `defaults.subject_id`:
+- If the sample contains a person/user/participant identifier (e.g. `userId`, `Id`, `participant`, `patient_id`), bind it: `subject_id: { path: "userId" }`.
+- If NO such identifier exists anywhere in the sample, SYNTHESIZE one as `"<data_source>:<record_id>"` — use the source name plus the most stable per-record identifier available, falling back to the record index: `subject_id: { template: "supermarket:{sessionId}" }` or `subject_id: { template: "questionnaire:{@record_index}" }`.
+- Whenever the subject_id is synthesized (not read from a real person identifier in the data), ALSO add an unconditional quality flag to every emit rule: `{ code: "SYNTHETIC_SUBJECT_ID", severity: "info", stage: "structured", message: "No person identifier in source data; subject_id synthesized as <pattern>" }`.
+- Do NOT use a synthetic id when a real one exists, and do NOT add the flag when binding a real identifier.
 
 Cleaner block (`clean`):
 - `heuristics`: ordered list, each entry either a name string or `{ name, ...params }`. Closed enum:
@@ -278,7 +284,10 @@ def build_user_prompt(
         "at most 2–3 `exists: true` / `equals` predicates on top-level fields that "
         "identify this source. Do not match on nested paths or enumerate every "
         "field the rules read. Verify the sample record itself would pass your "
-        "match block. Produce the YAML config now. Output only YAML.",
+        "match block. Also verify `defaults.subject_id` is set and resolves to a "
+        "non-null value for the sample — if the data has no person identifier, "
+        "synthesize `\"<data_source>:<record_id>\"` and add the SYNTHETIC_SUBJECT_ID "
+        "flag. Produce the YAML config now. Output only YAML.",
     ]
     return "\n".join(parts)
 
