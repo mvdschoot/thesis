@@ -57,14 +57,13 @@ Top-level sections:
 - `fhir` (optional): toggles + bundle shape for the FHIR R4 output stage. OMIT THIS BLOCK BY DEFAULT — omission already produces the full FHIR output with all defaults (Patient + Observation + Questionnaire, transaction bundle). Only include it when the user EXPLICITLY asks for something non-default (e.g. add a Provenance or Device resource, drop a resource, or switch to a collection bundle).
 - `omop` (optional): toggles + table selection for the OMOP CDM v5.4 output. OMIT THIS BLOCK BY DEFAULT — omission already produces the full OMOP CDM output with all five tables. Only include it when the user EXPLICITLY asks to disable a table or otherwise deviate.
 
-Match-block rigidity (MANDATORY):
-- Do NOT rely on `match.source` alone — that lets the engine try to transform records you can't actually handle. For every config you generate, the `record` list MUST:
-  1. Assert `exists: true` on every field the `defaults` block reads (subject_id source path, source_record_id template fields, timestamps).
-  2. Assert `type: "array", non_empty: true` on every path used as an `iterate` target in the `emit` rules.
-  3. Assert `type: "object"` on every intermediate container your emit paths walk through before reaching a leaf.
-  4. Pin any discriminator field (e.g. `dataType`, `measurementType`, `recordKind`) with `equals` or `in` to the exact value(s) this config is designed for. If the same source emits multiple record kinds, use `in: [...]` enumerating only the kinds this config handles.
-- A match block that would accept a garbage record is a bug. Prefer overly strict criteria; false positives produce unusable events, false negatives are surfaced as "no config matches" in the UI so the user can widen them.
-- Also important: the input data MUST be matched by the match block. Even if the input data does not entirely adhere to the 'descriptor' block; the input data is leading.
+Match-block guidance (KEEP IT SIMPLE):
+- The match block is a cheap routing check, not a schema validator. Keep `match.record` SHORT: at most 2–3 predicates, all on TOP-LEVEL fields of the record.
+  1. Assert `exists: true` on one or two top-level fields that are characteristic of this source (e.g. the subject-id field, the timestamp field, or the root array/object the emit rules iterate).
+  2. If the source emits multiple record kinds and a TOP-LEVEL discriminator field exists (e.g. `dataType`, `recordKind`), pin it with `equals` or `in`. If the discriminator is nested, skip it — don't reach into nested structures from the match block.
+- Do NOT enumerate every field the `defaults` or `emit` rules read, do NOT add `type:` assertions on intermediate containers, and do NOT match on deeply nested paths (`a.b.c[0].d`). Missing or malformed fields are handled downstream — the adapter's diagnostics and the validation stage flag them per record, which is far more useful than silently failing to match.
+- An overly strict match block is a bug: it makes the config reject the very data it was generated from. Prefer too loose over too strict; bad records that slip through are tagged by the pipeline (tag, don't drop), whereas a non-matching config produces nothing.
+- The input data MUST be matched by the match block. Even if the input data does not entirely adhere to the 'descriptor' block; the input data is leading.
 
 Value-spec forms (use anywhere a value is needed):
 - literal: `"foo"`, `42`, `null`
@@ -275,11 +274,11 @@ def build_user_prompt(
         parts += _descriptor_block(descriptors)
     parts += [
         "",
-        "Before emitting: derive a rigid `match.record` from the sample above. "
-        "Require existence of every field your `defaults` and `emit` rules read, "
-        "require `type: array, non_empty: true` on every `iterate` target, and "
-        "pin any discriminator field with `equals` or `in`. Produce the YAML "
-        "config now. Output only YAML.",
+        "Before emitting: derive a SIMPLE `match.record` from the sample above — "
+        "at most 2–3 `exists: true` / `equals` predicates on top-level fields that "
+        "identify this source. Do not match on nested paths or enumerate every "
+        "field the rules read. Verify the sample record itself would pass your "
+        "match block. Produce the YAML config now. Output only YAML.",
     ]
     return "\n".join(parts)
 

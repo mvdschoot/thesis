@@ -13,8 +13,6 @@ match:
       exists: true
     - field: measurementType
       exists: true
-    - field: measurementValue
-      type: object
 defaults:
   subject_id:
     path: userId

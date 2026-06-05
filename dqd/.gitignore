@@ -1,0 +1,17 @@
+# Local databases + DQD output
+output/
+*.sqlite
+*.duckdb
+*.duckdb.wal
+
+# RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Input/vocab payloads (data, not code) — keep the folders, ignore contents
+input/*
+!input/.gitkeep
+vocab/*
+!vocab/.gitkeep

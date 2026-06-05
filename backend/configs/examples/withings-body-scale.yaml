@@ -5,28 +5,12 @@ adapter:
 
 match:
   source: "withings"
+  # Keep matching loose: a couple of top-level existence checks is enough to
+  # route the record here. Unknown metric types or malformed values are
+  # flagged downstream by validation, not rejected at the door.
   record:
     - { field: "userId", exists: true }
-    - { field: "measurementDateTime", exists: true }
     - { field: "measurementValue", exists: true }
-    - { field: "measurementType", type: "object" }
-    # Only handle scale metrics we actually know how to map. Anything else
-    # (future Withings sleep/activity streams, malformed records) falls through.
-    - field: "measurementType.typeDescription"
-      in:
-        - "Weight"
-        - "Height"
-        - "Fat Free Mass"
-        - "Fat Ratio"
-        - "Fat Mass Weight"
-        - "Muscle Mass"
-        - "Bone Mass"
-        - "Hydration"
-        - "Heart Rate"
-        - "Diastolic Blood Pressure"
-        - "Systolic Blood Pressure"
-        - "SP02"
-        - "Pulse Wave Velocity"
 
 defaults:
   subject_id: { path: "userId" }
