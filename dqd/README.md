@@ -77,15 +77,23 @@ Opens the bundled DQD Shiny dashboard on the latest results.
 ## Vocabulary (optional — enables CONCEPT-level checks)
 
 The CONCEPT-level checks (`isStandardValidConcept`, `fkDomain`, `fkClass`,
-`standardConceptRecordCompleteness`, concept/unit plausibility) need the full
-OHDSI vocabulary. To enable them, download the vocabulary CSVs from
-[Athena](https://athena.ohdsi.org/) and place them in **`dqd/vocab/`**
-(`CONCEPT.csv`, `VOCABULARY.csv`, `CONCEPT_ANCESTOR.csv`, …, tab-delimited).
+`standardConceptRecordCompleteness`, concept/unit plausibility) and the
+`isForeignKey` checks on `*_concept_id` columns need the OHDSI vocabulary. To
+enable them, download the vocabulary CSVs from [Athena](https://athena.ohdsi.org/)
+and place them in **`dqd/vocab/`** (tab-delimited).
 
-- **Vocab present** → all three levels run (TABLE + FIELD + CONCEPT).
-- **Vocab absent** → TABLE + FIELD only (still the majority of checks).
+The harness loads a **lean set** — `CONCEPT.csv` plus the small `VOCABULARY`,
+`DOMAIN`, `CONCEPT_CLASS`, `RELATIONSHIP` lookups (see `VOCAB_TABLES` in
+`R/load_cdm.R`). The multi-GB `CONCEPT_ANCESTOR` / `CONCEPT_RELATIONSHIP` /
+`CONCEPT_SYNONYM` files are **not** loaded: no default DQD v5.4 check queries them
+(the only ancestor-using check, `plausibleGenderUseDescendants`, is not
+instantiated by the default threshold CSV). It is fine to leave those large files
+in `dqd/vocab/` — they are simply skipped.
 
-The harness auto-detects this — no code change needed.
+- **`CONCEPT.csv` present** → all three levels run (TABLE + FIELD + CONCEPT).
+- **`CONCEPT.csv` absent** → TABLE + FIELD only (still the majority of checks).
+
+Both `R/run_dqd.R` and `R/run_dqd_batch.R` auto-detect this — no code change needed.
 
 ## Interpreting the results (expected findings)
 

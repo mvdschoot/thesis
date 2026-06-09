@@ -1,3 +1,5 @@
+eval/*
+
 # Local databases + DQD output
 output/
 *.sqlite

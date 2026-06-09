@@ -37,10 +37,14 @@ HARMONIA_TABLES <- c(
 )
 
 # Athena vocabulary tables we load when a vocab/ folder is supplied.
+# Lean set: only the tables DQD's default TABLE/FIELD/CONCEPT checks query
+# (CONCEPT + the small lookup tables). CONCEPT_ANCESTOR / CONCEPT_RELATIONSHIP /
+# CONCEPT_SYNONYM are multi-GB and not referenced by any default check (the only
+# ancestor-using check, plausibleGenderUseDescendants, is not instantiated by the
+# default v5.4 threshold CSV), so we skip them. The CDM DDL still creates them as
+# empty tables, which is all the isForeignKey / fkDomain / fkClass checks need.
 VOCAB_TABLES <- c(
-  "CONCEPT", "VOCABULARY", "DOMAIN", "CONCEPT_CLASS",
-  "CONCEPT_RELATIONSHIP", "RELATIONSHIP", "CONCEPT_SYNONYM",
-  "CONCEPT_ANCESTOR"
+  "CONCEPT", "VOCABULARY", "DOMAIN", "CONCEPT_CLASS", "RELATIONSHIP"
 )
 
 # ---------------------------------------------------------------------------
@@ -185,6 +189,13 @@ load_vocabulary <- function(conn, vocab_dir) {
     )
     message("  loaded ", tbl, " ", nrow(df), " rows")
   }
+  # Index concept_id — DQD's isForeignKey / fkDomain / fkClass checks anti-join
+  # against concept, which is unusably slow on a multi-million-row table without it.
+  message("Indexing concept(concept_id) ...")
+  DatabaseConnector::executeSql(
+    conn, "CREATE INDEX IF NOT EXISTS idx_concept_id ON concept (concept_id);",
+    progressBar = FALSE, reportOverallTime = FALSE
+  )
   TRUE
 }
 
