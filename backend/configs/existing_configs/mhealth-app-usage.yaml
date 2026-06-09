@@ -1,0 +1,170 @@
+adapter:
+  id: "mhealth-app-usage-daily-v1"
+  version: "1.0.0"
+  description: "mHealth companion-app daily usage export. Fans out nested activity arrays into individual behavioural events."
+
+match:
+  source: "mhealth-app-usage"
+  record:
+    - { field: "userId", exists: true }
+    - { field: "date", exists: true }
+    - { field: "dataType", equals: "app-usage-daily" }
+
+defaults:
+  subject_id: { path: "userId" }
+  context:
+    source: "mhealth-app-usage"
+    modality: "app"
+    device: null
+    source_measurement_type: { path: "dataType" }
+  stage: "structured"
+  source_record_id:
+    template: "mhealth-app-usage:{userId}:{date}"
+
+emit:
+  - id: "exercise-completed"
+    description: "Completed exercise events from metrics.exercises.completed[]"
+    type: "event"
+    category: "exercise-completed"
+    granularity: "instant"
+    iterate: "metrics.exercises.completed"
+    timestamp:
+      start:
+        path: "@item.completedAt"
+        transform: "iso_millis"
+    payload:
+      value: { path: "@item.exerciseId" }
+      raw_value: { path: "@item.exerciseId" }
+      label: "exerciseId"
+      components:
+        - name: "week"
+          value: { path: "@item.week" }
+        - name: "day"
+          value: { path: "@item.day" }
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+  - id: "recipe-favorited"
+    description: "Favorited recipe events from metrics.recipes.favorited[]"
+    type: "event"
+    category: "recipe-favorited"
+    granularity: "instant"
+    iterate: "metrics.recipes.favorited"
+    timestamp:
+      start: { path: "@event.date", transform: "iso_date" }
+    payload:
+      value: { path: "@item.recipeId" }
+      raw_value: { path: "@item.recipeId" }
+      label: "recipeId"
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+  - id: "lesson-started"
+    description: "Education lesson started events from metrics.education.lessonsStarted[]"
+    type: "event"
+    category: "lesson-started"
+    granularity: "instant"
+    iterate: "metrics.education.lessonsStarted"
+    timestamp:
+      start:
+        path: "@item.startedAt"
+        transform: "iso_millis"
+    payload:
+      value: { path: "@item.lessonId" }
+      raw_value: { path: "@item.lessonId" }
+      label: "lessonId"
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+  - id: "lesson-completed"
+    description: "Education lesson completed events from metrics.education.lessonsCompleted[]"
+    type: "event"
+    category: "lesson-completed"
+    granularity: "instant"
+    iterate: "metrics.education.lessonsCompleted"
+    timestamp:
+      start:
+        path: "@item.completedAt"
+        transform: "iso_millis"
+    payload:
+      value: { path: "@item.lessonId" }
+      raw_value: { path: "@item.lessonId" }
+      label: "lessonId"
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+  - id: "profile-question-answered"
+    description: "Assessment profile question answered events from metrics.assessments.profileQuestionsAnswered[]"
+    type: "survey"
+    category: "profile-question-answered"
+    granularity: "instant"
+    iterate: "metrics.assessments.profileQuestionsAnswered"
+    timestamp:
+      start: { path: "@event.date", transform: "iso_date" }
+    payload:
+      value: { path: "@item.questionId" }
+      raw_value: { path: "@item.questionId" }
+      label: "questionId"
+      components:
+        - name: "answer"
+          value: { path: "@item.answer" }
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+  - id: "badge-earned"
+    description: "Gamification badge earned events from metrics.gamification.badgesEarned[]"
+    type: "event"
+    category: "badge-earned"
+    granularity: "instant"
+    iterate: "metrics.gamification.badgesEarned"
+    timestamp:
+      start:
+        path: "@item.unlockedAt"
+        transform: "iso_millis"
+    payload:
+      value: { path: "@item.badgeId" }
+      raw_value: { path: "@item.badgeId" }
+      label: "badgeId"
+    quality:
+      flags:
+        - code: "SYNTHETIC_SUBJECT_ID"
+          severity: "info"
+          stage: "structured"
+          message: "No person identifier in source data; subject_id synthesized as <data_source>:<record_id>"
+
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+    - unit_inferrer
+
+validate:
+  enabled: [required_fields, timestamp_window, payload_shape, unit_whitelist, range]
+  timestamp_window: { min: "2020-01-01", max: "now+1d" }
+
+qualify:
+  enabled: [completeness, duplicates, outliers, conformance, plausibility]
+  outliers: { hampel_k: 3.5, min_group_size: 5 }
+  duplicates: { fields: [subject_id, category, timestamp, payload.value], value_round_digits: 3 }
+  plausibility: { warning_count_for_review: 1 }

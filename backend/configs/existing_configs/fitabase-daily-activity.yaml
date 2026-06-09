@@ -1,0 +1,282 @@
+adapter:
+  id: fitabase-daily-activity
+  version: 1.0.0
+  description: 'Fitabase daily activity summary CSV: daily steps headline plus distance and activity-minute components.'
+match:
+  source: fitabase-daily-activity
+  record:
+    - field: Id
+      exists: true
+    - field: ActivityDate
+      exists: true
+    - field: TotalSteps
+      exists: true
+defaults:
+  subject_id:
+    path: Id
+  context:
+    source: fitabase-daily-activity
+    modality: wearable
+    device: null
+    source_measurement_type: daily activity summary
+  stage: structured
+  source_record_id:
+    template: fitabase-daily-activity:{Id}:{ActivityDate}
+emit:
+  - id: total-steps
+    description: Daily Fitabase total steps.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: TotalSteps
+      raw_value:
+        path: TotalSteps
+      unit: steps
+      label: TotalSteps
+  - id: total-distance
+    description: Daily Fitabase total distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: TotalDistance
+      raw_value:
+        path: TotalDistance
+      unit: km
+      label: TotalDistance
+  - id: tracker-distance
+    description: Daily Fitabase tracker distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: TrackerDistance
+      raw_value:
+        path: TrackerDistance
+      unit: km
+      label: TrackerDistance
+  - id: logged-activities-distance
+    description: Daily Fitabase logged activities distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: LoggedActivitiesDistance
+      raw_value:
+        path: LoggedActivitiesDistance
+      unit: km
+      label: LoggedActivitiesDistance
+  - id: very-active-distance
+    description: Daily Fitabase very active distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: VeryActiveDistance
+      raw_value:
+        path: VeryActiveDistance
+      unit: km
+      label: VeryActiveDistance
+  - id: moderately-active-distance
+    description: Daily Fitabase moderately active distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: ModeratelyActiveDistance
+      raw_value:
+        path: ModeratelyActiveDistance
+      unit: km
+      label: ModeratelyActiveDistance
+  - id: light-active-distance
+    description: Daily Fitabase light active distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: LightActiveDistance
+      raw_value:
+        path: LightActiveDistance
+      unit: km
+      label: LightActiveDistance
+  - id: sedentary-active-distance
+    description: Daily Fitabase sedentary active distance.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: SedentaryActiveDistance
+      raw_value:
+        path: SedentaryActiveDistance
+      unit: km
+      label: SedentaryActiveDistance
+  - id: very-active-minutes
+    description: Daily Fitabase very active minutes.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: VeryActiveMinutes
+      raw_value:
+        path: VeryActiveMinutes
+      unit: min
+      label: VeryActiveMinutes
+  - id: fairly-active-minutes
+    description: Daily Fitabase fairly active minutes.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: FairlyActiveMinutes
+      raw_value:
+        path: FairlyActiveMinutes
+      unit: min
+      label: FairlyActiveMinutes
+  - id: lightly-active-minutes
+    description: Daily Fitabase lightly active minutes.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: LightlyActiveMinutes
+      raw_value:
+        path: LightlyActiveMinutes
+      unit: min
+      label: LightlyActiveMinutes
+  - id: sedentary-minutes
+    description: Daily Fitabase sedentary minutes.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: SedentaryMinutes
+      raw_value:
+        path: SedentaryMinutes
+      unit: min
+      label: SedentaryMinutes
+  - id: calories
+    description: Daily Fitabase calories.
+    type: measurement
+    category: activity-summary
+    granularity: daily
+    timestamp:
+      start:
+        path: ActivityDate
+        parse_timestamp: '%m/%d/%Y'
+    payload:
+      value:
+        path: Calories
+      raw_value:
+        path: Calories
+      unit: kcal
+      label: Calories
+clean:
+  heuristics:
+    - whitespace
+    - name: timestamp_normalizer
+      accept_formats:
+        - '%m/%d/%Y'
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2014-01-01'
+    max: now+1d
+  categories:
+    activity-summary:
+      unit_whitelist:
+        - steps
+        - km
+        - min
+        - kcal
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  outliers:
+    hampel_k: 3.5
+    min_group_size: 5
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance

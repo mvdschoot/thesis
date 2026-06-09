@@ -42,6 +42,20 @@ const CATEGORY_OPTIONS: Coding[] = [
   { system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "therapy", display: "Therapy" },
 ];
 
+// Build a local (non-standard) coding for a slot, deriving a stable slug from
+// its label. Same shape as the per-slot "Use local coding" button.
+function localCodingForSlot(slot: ConceptSlot): Coding {
+  const slug = slot.label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return {
+    system: "urn:harmonization:local",
+    code: slug,
+    display: slot.label,
+  };
+}
+
 function defaultSystemForSlot(slot: ConceptSlot): TerminologySystem | null {
   if (slot.kind === "unit") return "ucum";
   if (slot.kind === "code") return "loinc";
@@ -51,8 +65,8 @@ function defaultSystemForSlot(slot: ConceptSlot): TerminologySystem | null {
 // Which vocabularies a slot's search box can switch between.
 function vocabOptionsForSlot(slot: ConceptSlot): TerminologySystem[] {
   if (slot.kind === "unit") return ["ucum"];
-  if (slot.kind === "code")
-    return ["loinc", "snomed", "rxnorm", "icd10", "cpt"];
+  // Observation code & component code must be LOINC.
+  if (slot.kind === "code") return ["loinc"];
   return [];
 }
 
@@ -134,6 +148,16 @@ export default function ConceptsPanel({
     }
   }
 
+  function handleAllLocal() {
+    const next: Record<string, Coding> = {};
+    for (const s of slots) {
+      if ((s.kind === "code" || s.kind === "unit") && !mappings[s.key]) {
+        next[s.key] = localCodingForSlot(s);
+      }
+    }
+    if (Object.keys(next).length > 0) onBulkChange(next);
+  }
+
   if (slots.length === 0) {
     return (
       <div className="card" style={{ marginTop: 16 }}>
@@ -166,6 +190,14 @@ export default function ConceptsPanel({
             title="Use AI to suggest terminology codes for all unbound slots"
           >
             {suggesting ? "Suggesting…" : "Suggest with AI"}
+          </button>
+          <button
+            className="btn"
+            onClick={handleAllLocal}
+            disabled={suggesting || running || unboundCount === 0}
+            title="Bind every unbound code/unit slot to a local (urn:harmonization:local) coding derived from its label"
+          >
+            Use local for all
           </button>
           <button
             className="btn primary"
@@ -276,17 +308,7 @@ function SlotRow({ slot, coding, noMatch, onChange }: SlotRowProps) {
               {!effective && (
                 <button
                   className="btn tiny"
-                  onClick={() => {
-                    const slug = slot.label
-                      .toLowerCase()
-                      .replace(/[^a-z0-9]+/g, "-")
-                      .replace(/^-|-$/g, "");
-                    onChange({
-                      system: "urn:harmonization:local",
-                      code: slug,
-                      display: slot.label,
-                    });
-                  }}
+                  onClick={() => onChange(localCodingForSlot(slot))}
                   title={`Create local coding: urn:harmonization:local|${slot.label}`}
                 >
                   Use local coding

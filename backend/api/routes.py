@@ -449,6 +449,7 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
         return SuggestConceptsResponse()
 
     valid_keys = {s.key for s in non_category}
+    slot_kind = {s.key: s.kind for s in non_category}
     slot_dicts = [s.model_dump() for s in non_category]
 
     try:
@@ -536,6 +537,13 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
         if not isinstance(val, dict):
             continue
         if not val.get("system") or not val.get("code"):
+            continue
+        # Observation code & component code must be LOINC — drop anything else.
+        if slot_kind.get(key) == "code" and val["system"] != "http://loinc.org":
+            logger.warning(
+                "Dropping non-LOINC code %s (%s) for code slot %s",
+                val["code"], val["system"], key,
+            )
             continue
         confidence = val.get("confidence")
         if confidence not in ("high", "medium", "low"):

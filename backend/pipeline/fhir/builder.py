@@ -497,15 +497,27 @@ def build_bundle(
             device = _build_device(src, dev)
             entries.append(_entry(device["id"], device, bundle_type=config.bundle_type))
 
-    # Questionnaire definitions — one per unique survey category.
+    # Questionnaire definitions — one per unique survey category. Items come
+    # from each survey event's components when present; otherwise the event is
+    # itself one answered question (value + label), so we synthesize a single
+    # item from its label/value. Without this fallback, per-item survey configs
+    # (one event per question, no components) would emit zero Questionnaires.
     seen_questionnaires: dict[str, list[Component]] = {}
     if "Questionnaire" in include:
         for ev in events:
-            if ev.type == EventType.SURVEY and ev.payload.components:
-                cat = ev.category
-                if cat not in seen_questionnaires:
-                    seen_questionnaires[cat] = []
-                seen_questionnaires[cat].extend(ev.payload.components)
+            if ev.type != EventType.SURVEY:
+                continue
+            if ev.payload.components:
+                items = ev.payload.components
+            elif ev.payload.value is not None:
+                items = [Component(
+                    name=ev.payload.label or ev.category,
+                    value=ev.payload.value,
+                    unit=ev.payload.unit,
+                )]
+            else:
+                continue
+            seen_questionnaires.setdefault(ev.category, []).extend(items)
         for cat, components in seen_questionnaires.items():
             q = _build_questionnaire(cat, components)
             q_uuid = questionnaire_uuid(cat)

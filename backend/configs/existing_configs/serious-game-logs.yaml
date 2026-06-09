@@ -1,0 +1,117 @@
+adapter:
+  id: serious-game-logs
+  version: 1.1.0
+  description: >-
+    Serious-game session logs (JSON array, one object per line) with synthesized subject_id and synthetic timestamp;
+    score is the headline value and gameplay counts are components. DEBUG FIX (v1.1): the v1 raw config used the
+    epoch-zero literal 1970-01-01 for the synthetic timestamp, which fails DQD temporal/plausibility checks (observation
+    predates any plausible study period). Replaced with the study collection date 2022-11-18 (taken from the parallel
+    eligence-data.csv created_at column); the SYNTHETIC_TIMESTAMP flag still records that this is not a real per-record
+    time.
+match:
+  source: serious-game-logs
+  record:
+    - field: resourceId
+      exists: true
+    - field: score
+      exists: true
+    - field: activity
+      equals: SOLO
+defaults:
+  subject_id:
+    template: serious-game-logs:{resourceId}
+  context:
+    source: serious-game-logs
+    modality: game
+    device: null
+    source_measurement_type: session log
+  stage: structured
+  source_record_id:
+    path: resourceId
+emit:
+  - id: game-session-score
+    description: One serious-game session log emitted as a session-level score event.
+    type: session
+    category: game-session-score
+    granularity: session
+    timestamp:
+      start: '2022-11-18T00:00:00.000Z'
+    payload:
+      value:
+        path: score
+      raw_value:
+        path: score
+      unit: '%'
+      label: score
+      components:
+        - name: group
+          value:
+            path: group
+        - name: status
+          value:
+            path: status
+        - name: activity
+          value:
+            path: activity
+        - name: allowedTime
+          value:
+            path: allowedTime
+          unit: s
+        - name: wrongAnswers
+          value:
+            path: wrongAnswers
+        - name: timeRemaining
+          value:
+            path: timeRemaining
+          unit: s
+        - name: correctAnswers
+          value:
+            path: correctAnswers
+    quality:
+      flags:
+        - code: SYNTHETIC_TIMESTAMP
+          severity: info
+          stage: structured
+          message: No per-record timestamp in source data; synthetic study-date timestamp (2022-11-18) assigned.
+        - code: SYNTHETIC_SUBJECT_ID
+          severity: info
+          stage: structured
+          message: No person identifier in source data; subject_id synthesized as serious-game-logs:{resourceId}
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  categories:
+    game-session-score:
+      unit_whitelist:
+        - '%'
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance

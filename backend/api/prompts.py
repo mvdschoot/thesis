@@ -111,8 +111,12 @@ If the source has no per-record timestamp at all, declare a literal ISO-8601 str
 Subject ID (MANDATORY) — every emitted event MUST have a non-null `subject_id`. NEVER omit `defaults.subject_id`:
 - If the sample contains a person/user/participant identifier (e.g. `userId`, `Id`, `participant`, `patient_id`), bind it: `subject_id: { path: "userId" }`.
 - If NO such identifier exists anywhere in the sample, SYNTHESIZE one as `"<data_source>:<record_id>"` — use the source name plus the most stable per-record identifier available, falling back to the record index: `subject_id: { template: "supermarket:{sessionId}" }` or `subject_id: { template: "questionnaire:{@record_index}" }`.
-- Whenever the subject_id is synthesized (not read from a real person identifier in the data), ALSO add an unconditional quality flag to every emit rule: `{ code: "SYNTHETIC_SUBJECT_ID", severity: "info", stage: "structured", message: "No person identifier in source data; subject_id synthesized as <pattern>" }`.
-- Do NOT use a synthetic id when a real one exists, and do NOT add the flag when binding a real identifier.
+- The SYNTHETIC_SUBJECT_ID flag is governed by ONE mechanical test — look at the `subject_id` spec you wrote, NOT at any other reasoning:
+    - `subject_id: { path: ... }` (binds a field from the record) → this is a REAL identifier. DO NOT add the flag. This is the common case.
+    - `subject_id: { template: "..." }` where the template embeds a source name and/or `{@record_index}` because the record carries no person identifier → this is SYNTHETIC. Add the flag.
+    - Rule of thumb: no `path:` in the spec ⇒ flag; any `path:` in the spec ⇒ no flag.
+- When (and only when) the spec is synthetic by that test, add an unconditional quality flag to EVERY emit rule: `{ code: "SYNTHETIC_SUBJECT_ID", severity: "info", stage: "structured", message: "No person identifier in source data; subject_id synthesized as <pattern>" }`.
+- A `template:` that merely reformats a real field (e.g. `template: "{userId}"`) is NOT synthetic — prefer `path:` there and do not add the flag.
 
 Cleaner block (`clean`):
 - `heuristics`: ordered list, each entry either a name string or `{ name, ...params }`. Closed enum:
@@ -285,9 +289,10 @@ def build_user_prompt(
         "identify this source. Do not match on nested paths or enumerate every "
         "field the rules read. Verify the sample record itself would pass your "
         "match block. Also verify `defaults.subject_id` is set and resolves to a "
-        "non-null value for the sample — if the data has no person identifier, "
-        "synthesize `\"<data_source>:<record_id>\"` and add the SYNTHETIC_SUBJECT_ID "
-        "flag. Produce the YAML config now. Output only YAML.",
+        "non-null value for the sample. Add the SYNTHETIC_SUBJECT_ID flag ONLY if "
+        "the data has no person identifier and you synthesized `subject_id` via a "
+        "`template:` — if `subject_id` uses `path:` to bind a real field, do NOT add "
+        "the flag. Produce the YAML config now. Output only YAML.",
     ]
     return "\n".join(parts)
 
@@ -409,7 +414,9 @@ def build_concept_suggest_system_prompt() -> str:
         "You are a clinical terminology specialist. Your task is to map health-data "
         "concept slots to standard FHIR coding systems.\n\n"
         "You have a `search_terminology` tool. Use it to find the best code for each slot:\n"
-        "- For **code** slots (headline measurement and component codings): search `loinc` and `snomed` first..\n"
+        "- For **code** slots (headline measurement and component codings): search `loinc` ONLY. "
+        "Observation and component codes must be LOINC. If LOINC has no match, put the slot in "
+        "`no_matches` rather than falling back to `snomed` or any other vocabulary.\n"
         "- For **unit** slots: search `ucum`.\n"
         "- Skip **category** slots — they already have defaults.\n\n"
         "CRITICAL RULE: You MUST NEVER invent, guess, or recall codes from memory. "

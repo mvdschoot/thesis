@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { editConfig, updateConfig, type ConfigMatch, type Descriptor } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -57,11 +57,17 @@ export default function AdapterPanel({
   const [editError, setEditError] = useState<string | null>(null);
   const [proposed, setProposed] = useState<string | null>(null);
 
-  // Re-seed the buffer from the current config every time we enter YAML mode
-  // or the active config changes. The parsed config is the source of truth in
-  // visual mode; flipping into YAML mode regenerates the on-disk shape.
+  // Re-seed the buffer once per selected config. Backend configs are
+  // lazy-loaded, so `config` may still be null right after `configKey` changes
+  // and only arrive asynchronously. Keying off the seeded config id (rather than
+  // just `configKey`) lets us seed when the config finally loads, while the ref
+  // guard avoids clobbering the user's in-editor edits — those keep `configKey`
+  // unchanged and `config` is fed back in via onChange, so we must not re-seed.
+  const seededKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!config) return;
+    if (seededKeyRef.current === configKey) return;
+    seededKeyRef.current = configKey;
     const text = dumpAdapterYaml(config);
     setYamlText(text);
     setSavedYaml(text);
@@ -72,9 +78,7 @@ export default function AdapterPanel({
     setShowEditBox(false);
     setInstruction("");
     setEditError(null);
-    // Re-seed the buffer when the user picks a different config.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configKey]);
+  }, [configKey, config]);
 
   // Auto-clear "Saved" toast after 2s.
   useEffect(() => {

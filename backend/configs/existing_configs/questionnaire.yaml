@@ -1,0 +1,97 @@
+adapter:
+  id: questionnaire
+  version: 1.1.0
+  description: >-
+    Student well-being Google-Form questionnaire CSV. One survey event per (respondent, question): the answer is the
+    headline value, the question text is the label. DEBUG FIX (v1.1): the v1 raw config combined iterate_object with a
+    static 34-entry component list that all read the same @item.value, so every event duplicated the current answer
+    across 34 components with value=null (1428 events x 34 dummy components). Replaced with a single per-item event
+    whose value is @item.value.
+match:
+  source: questionnaire
+  record:
+    - field: Timestamp
+      exists: true
+    - field: 32. Gender
+      exists: true
+defaults:
+  subject_id:
+    template: questionnaire:{@record_index}
+  context:
+    source: questionnaire
+    modality: survey
+    device: null
+    source_measurement_type: student well-being questionnaire
+  stage: structured
+  source_record_id:
+    template: questionnaire:{@record_index}
+emit:
+  - id: student-wellbeing-item
+    description: >-
+      One survey event per answered question. Question columns (all but Timestamp) are fanned out via iterate_object;
+      the answer is the value, the question is the label.
+    type: survey
+    category: student-wellbeing
+    granularity: instant
+    timestamp:
+      start:
+        path: Timestamp
+        parse_timestamp: '%m/%d/%Y %H:%M:%S'
+    iterate_object:
+      source: .
+      all_keys: true
+      exclude:
+        - Timestamp
+    payload:
+      value:
+        path: '@item.value'
+      raw_value:
+        path: '@item.value'
+      label:
+        path: '@item.label'
+    quality:
+      flags:
+        - code: SYNTHETIC_SUBJECT_ID
+          severity: info
+          stage: structured
+          message: No person identifier in source data; subject_id synthesized as questionnaire:{@record_index}
+clean:
+  heuristics:
+    - whitespace
+    - name: timestamp_normalizer
+      accept_formats:
+        - '%m/%d/%Y %H:%M:%S'
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2024-01-01'
+    max: now+1d
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.label
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance
+    - Questionnaire

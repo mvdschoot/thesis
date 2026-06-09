@@ -188,8 +188,10 @@ def _apply_to_event(
     """Apply mappings to a single event. Returns True if anything bound."""
     bound = False
 
-    # Headline code → CanonicalEvent.mapping.
+    # Headline code → CanonicalEvent.mapping. Code slots must be LOINC.
     code_m = mappings.get(code_key(event))
+    if code_m and code_m.get("system") and code_m["system"] != LOINC_SYSTEM:
+        code_m = None
     if code_m:
         event.mapping.standard_code = code_m.get("code")
         event.mapping.standard_system = code_m.get("system")
@@ -213,6 +215,8 @@ def _apply_to_event(
     component_unit_map: dict[str, dict[str, str]] = {}
     for c in event.payload.components or []:
         cm = mappings.get(component_key(event, c))
+        if cm and cm.get("system") and cm["system"] != LOINC_SYSTEM:
+            cm = None  # component code must be LOINC
         if cm:
             components_map[c.name] = cm
             bound = True

@@ -18,8 +18,8 @@ services:
         NEXT_PUBLIC_FHIR_BASE_URL: http://localhost:8080/fhir
     ports:
       - "3000:3000"
-    depends_on:
-      - api
+    # depends_on:
+    #   - api
 
   hapi-db:
     image: postgres:16-alpine

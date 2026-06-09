@@ -1,0 +1,148 @@
+adapter:
+  id: fitabase-weight
+  version: 1.0.0
+  description: Fitabase weight-log CSV with weight as the headline measurement and fat/BMI as components.
+match:
+  source: fitabase-weight
+  record:
+    - field: Id
+      exists: true
+    - field: Date
+      exists: true
+    - field: WeightKg
+      exists: true
+defaults:
+  subject_id:
+    path: Id
+  context:
+    source: fitabase-weight
+    modality: scale
+    device: null
+    source_measurement_type: weight log
+  stage: structured
+  source_record_id:
+    template: fitabase-weight:{Id}:{LogId}
+emit:
+  - id: weight-log
+    description: Fitabase weight log row with weight as the primary measurement.
+    type: measurement
+    category: body-weight
+    granularity: instant
+    timestamp:
+      start:
+        path: Date
+        parse_timestamp: '%m/%d/%Y %I:%M:%S %p'
+    payload:
+      value:
+        path: WeightKg
+      raw_value:
+        path: WeightKg
+      unit: kg
+      label: WeightKg
+    extensions:
+      fitabase.weight_pounds:
+        path: WeightPounds
+      fitabase.is_manual_report:
+        path: IsManualReport
+      fitabase.log_id:
+        path: LogId
+  - id: fat-log
+    description: Fitabase fat measurement row.
+    type: measurement
+    category: body-fat
+    granularity: instant
+    timestamp:
+      start:
+        path: Date
+        parse_timestamp: '%m/%d/%Y %I:%M:%S %p'
+    payload:
+      value:
+        path: Fat
+      raw_value:
+        path: Fat
+      unit: '%'
+      label: Fat
+    extensions:
+      fitabase.weight_pounds:
+        path: WeightPounds
+      fitabase.is_manual_report:
+        path: IsManualReport
+      fitabase.log_id:
+        path: LogId
+  - id: bmi-log
+    description: Fitabase BMI measurement row.
+    type: measurement
+    category: body-mass-index
+    granularity: instant
+    timestamp:
+      start:
+        path: Date
+        parse_timestamp: '%m/%d/%Y %I:%M:%S %p'
+    payload:
+      value:
+        path: BMI
+      raw_value:
+        path: BMI
+      unit: kg/m2
+      label: BMI
+    extensions:
+      fitabase.weight_pounds:
+        path: WeightPounds
+      fitabase.is_manual_report:
+        path: IsManualReport
+      fitabase.log_id:
+        path: LogId
+clean:
+  heuristics:
+    - whitespace
+    - name: timestamp_normalizer
+      accept_formats:
+        - '%m/%d/%Y %I:%M:%S %p'
+    - type_coercer
+    - name: unit_inferrer
+      mappings:
+        fitabase-weight|body-weight: kg
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2010-01-01'
+    max: now+1d
+  categories:
+    body-weight:
+      unit_whitelist:
+        - kg
+      range:
+        min: 20
+        max: 500
+        on_violation:
+          severity: warning
+          code: WEIGHT_OUT_OF_RANGE
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  outliers:
+    hampel_k: 3.5
+    min_group_size: 5
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance

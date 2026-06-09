@@ -1,0 +1,148 @@
+adapter:
+  id: mhealth-withings
+  version: 1.0.0
+  description: >-
+    mHealth Withings body-scale export. One measurement per record, with category derived from
+    measurementType.typeDescription.
+match:
+  source: mhealth-withings
+  record:
+    - field: userId
+      exists: true
+    - field: measurementType
+      exists: true
+    - field: measurementValue
+      exists: true
+defaults:
+  subject_id:
+    path: userId
+  context:
+    source: mhealth-withings
+    modality: scale
+    device: null
+    source_measurement_type:
+      path: measurementType.typeDescription
+  stage: structured
+  source_record_id:
+    template: mhealth-withings:{userId}:{measurementType.typeValue}:{measurementDateTime}
+emit:
+  - id: body-scale-measurement
+    description: Single body-scale measurement emitted from each Withings record.
+    type: measurement
+    category:
+      lookup:
+        key:
+          path: measurementType.typeDescription
+        map:
+          Weight: weight
+          Height: height
+          Fat Free Mass: fat-free-mass
+          Fat Ratio: body-fat-ratio
+          Fat Mass Weight: fat-mass
+          Muscle Mass: muscle-mass
+          Bone Mass: bone-mass
+          Hydration: body-water
+          Heart Rate: heart-rate
+          Diastolic Blood Pressure: blood-pressure-diastolic
+          Systolic Blood Pressure: blood-pressure-systolic
+          SP02: spo2
+          Pulse Wave Velocity: pulse-wave-velocity
+        default: unknown
+    granularity: instant
+    timestamp:
+      start:
+        path: measurementDateTime
+        transform: iso_millis
+    payload:
+      value:
+        path: measurementValue
+      raw_value:
+        path: measurementValue
+      unit:
+        lookup:
+          key:
+            path: measurementType.typeDescription
+          map:
+            Weight: kg
+            Height: m
+            Fat Free Mass: kg
+            Fat Ratio: '%'
+            Fat Mass Weight: kg
+            Muscle Mass: kg
+            Bone Mass: kg
+            Hydration: kg
+            Heart Rate: bpm
+            Diastolic Blood Pressure: mmHg
+            Systolic Blood Pressure: mmHg
+            SP02: '%'
+            Pulse Wave Velocity: m/s
+          default: null
+      label:
+        path: measurementType.typeDescription
+    extensions:
+      mhealth-withings.typeValue:
+        path: measurementType.typeValue
+      mhealth-withings.attrib:
+        path: attrib
+      mhealth-withings.createdDateTime:
+        path: createdDateTime
+      mhealth-withings.modifiedDateTime:
+        path: modifiedDateTime
+    quality:
+      flags:
+        - condition:
+            path: attrib
+            equals: 2
+          code: MANUAL_ENTRY
+          severity: info
+          stage: structured
+          message: Measurement entered manually by the user (attrib=2)
+        - condition:
+            path: attrib
+            equals: 1
+          code: AMBIGUOUS_SUBJECT
+          severity: warning
+          stage: structured
+          message: Withings flagged subject attribution as ambiguous (attrib=1)
+clean:
+  heuristics:
+    - whitespace
+    - timestamp_normalizer
+    - type_coercer
+    - name: unit_inferrer
+      mappings:
+        mhealth-withings|body-water: kg
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2010-01-01'
+    max: now+1d
+qualify:
+  enabled:
+    - completeness
+    - duplicates
+    - outliers
+    - conformance
+    - plausibility
+  outliers:
+    hampel_k: 3.5
+    min_group_size: 5
+  duplicates:
+    fields:
+      - subject_id
+      - category
+      - timestamp
+      - payload.value
+    value_round_digits: 3
+  plausibility:
+    warning_count_for_review: 1
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance

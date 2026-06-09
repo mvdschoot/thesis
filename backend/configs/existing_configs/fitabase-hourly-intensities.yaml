@@ -1,0 +1,86 @@
+adapter:
+  id: fitabase-hourly-intensities
+  version: 1.0.0
+  description: Fitabase hourly intensities CSV with one hourly activity-intensity measurement per row.
+match:
+  source: fitabase-hourly-intensities
+  record:
+    - field: Id
+      exists: true
+    - field: ActivityHour
+      exists: true
+    - field: TotalIntensity
+      exists: true
+defaults:
+  subject_id:
+    path: Id
+  context:
+    source: fitabase-hourly-intensities
+    modality: wearable
+    device: null
+    source_measurement_type: hourly intensity
+  stage: structured
+  source_record_id:
+    template: fitabase-hourly-intensities:{Id}:{ActivityHour}
+emit:
+  - id: hourly-total-intensity
+    description: One hourly total intensity measurement from Fitabase.
+    type: measurement
+    category: activity-intensity
+    granularity: interval
+    timestamp:
+      start:
+        path: ActivityHour
+        parse_timestamp: '%m/%d/%Y %I:%M:%S %p'
+      duration_seconds: 3600
+    payload:
+      value:
+        path: TotalIntensity
+      raw_value:
+        path: TotalIntensity
+      unit: intensity
+      label: TotalIntensity
+  - id: hourly-average-intensity
+    description: One hourly average intensity measurement from Fitabase.
+    type: measurement
+    category: activity-intensity
+    granularity: interval
+    timestamp:
+      start:
+        path: ActivityHour
+        parse_timestamp: '%m/%d/%Y %I:%M:%S %p'
+      duration_seconds: 3600
+    payload:
+      value:
+        path: AverageIntensity
+      raw_value:
+        path: AverageIntensity
+      unit: intensity
+      label: AverageIntensity
+clean:
+  heuristics:
+    - whitespace
+    - name: timestamp_normalizer
+      accept_formats:
+        - '%m/%d/%Y %I:%M:%S %p'
+    - type_coercer
+    - unit_inferrer
+validate:
+  enabled:
+    - required_fields
+    - timestamp_window
+    - payload_shape
+    - unit_whitelist
+    - range
+  timestamp_window:
+    min: '2016-01-01'
+    max: now+1d
+  categories:
+    activity-intensity:
+      unit_whitelist:
+        - intensity
+fhir:
+  include:
+    - Observation
+    - Patient
+    - Provenance
