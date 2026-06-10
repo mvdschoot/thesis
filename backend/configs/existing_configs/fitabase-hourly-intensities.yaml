@@ -84,3 +84,4 @@ fhir:
     - Observation
     - Patient
     - Provenance
+    - Device

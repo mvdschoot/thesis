@@ -17,7 +17,7 @@ defaults:
   context:
     source: fitabase-weight
     modality: scale
-    device: null
+    device: Fitbit SmartWatch
     source_measurement_type: weight log
   stage: structured
   source_record_id:
@@ -146,3 +146,4 @@ fhir:
     - Observation
     - Patient
     - Provenance
+    - Device

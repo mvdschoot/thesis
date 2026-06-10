@@ -38,6 +38,39 @@ _ACTIVITY_CATEGORIES: frozenset[str] = frozenset({
     "sleep", "sleep-stage",
 })
 
+# LOINC codes the R4 base spec ties to the vital-signs profile family; any
+# Observation bearing one MUST carry a category coding of `vital-signs`.
+_VITAL_SIGN_LOINC: frozenset[str] = frozenset({
+    "85353-1",  # vital signs panel
+    "9279-1",   # respiratory rate
+    "8867-4",   # heart rate
+    "2708-6", "59408-5",  # oxygen saturation
+    "8310-5",   # body temperature
+    "8302-2",   # body height
+    "8306-3",   # body height lying
+    "8287-5",   # head circumference
+    "29463-7",  # body weight
+    "39156-5",  # BMI
+    "85354-9",  # blood pressure panel
+    "8480-6",   # systolic BP
+    "8462-4",   # diastolic BP
+})
+_OBS_CATEGORY_SYSTEM = "http://terminology.hl7.org/CodeSystem/observation-category"
+_QUALITY_FLAG_URL = "https://harmonia.thesis/fhir/StructureDefinition/quality-flag"
+
+
+def _has_value(value: Any) -> bool:
+    """True when a payload value is present (not None / not blank string)."""
+    return value is not None and not (isinstance(value, str) and not value.strip())
+
+
+def _flag_texts(event: CanonicalEvent) -> list[str]:
+    """Render quality flags as ``[severity/code] message`` text lines."""
+    return [
+        f"[{f.severity.value}/{f.code}] {f.message or ''}".strip()
+        for f in event.quality.flags
+    ]
+
 
 def _category_text_for_event(event: CanonicalEvent) -> str:
     """Pick a coarse FHIR Observation.category text bucket."""
@@ -97,9 +130,10 @@ def _value_block(
 
     Numeric → ``valueQuantity`` with UCUM ``system``/``code`` when the MAPPED
     stage has bound a unit. Boolean → ``valueBoolean``. Anything else, when
-    not None, falls through to ``valueString``.
+    present, falls through to ``valueString``. A None / blank-string value
+    yields no element (an empty ``value[x]`` would violate FHIR ele-1).
     """
-    if value is None:
+    if not _has_value(value):
         return {}
     if isinstance(value, bool):
         return {"valueBoolean": value}
@@ -260,6 +294,22 @@ def _build_observation(
     if cat_coding:
         category_cc["coding"] = [cat_coding]
 
+    # Any Observation coded with a vital-sign LOINC must carry the `vital-signs`
+    # category slice required by the R4 base profile (open slicing — the coarse
+    # category above stays). Keyed on the bound LOINC code, not the canonical
+    # category string, since the spec triggers on the code.
+    categories: list[dict[str, Any]] = [category_cc]
+    m = event.mapping
+    if (m and m.standard_code in _VITAL_SIGN_LOINC
+            and m.standard_system and "loinc" in m.standard_system.lower()):
+        categories.append({
+            "coding": [{
+                "system": _OBS_CATEGORY_SYSTEM,
+                "code": "vital-signs",
+                "display": "Vital Signs",
+            }],
+        })
+
     code_cc: dict[str, Any] = {"text": event.payload.label or event.category}
     code_coding = _coding_from_mapping(event.mapping)
     if code_coding:
@@ -269,7 +319,7 @@ def _build_observation(
         "resourceType": "Observation",
         "id": event.event_id,
         "status": _status_for_event(event),
-        "category": [category_cc],
+        "category": categories,
         "code": code_cc,
         "subject": {"reference": f"urn:uuid:{patient_uuid}"},
     }
@@ -302,14 +352,7 @@ def _build_observation(
         obs["component"] = comp_list
 
     if event.quality.flags:
-        obs["note"] = [
-            {
-                "text": (
-                    f"[{f.severity.value}/{f.code}] {f.message or ''}".strip()
-                )
-            }
-            for f in event.quality.flags
-        ]
+        obs["note"] = [{"text": t} for t in _flag_texts(event)]
 
     if device_uuid_value:
         obs["device"] = {"reference": f"urn:uuid:{device_uuid_value}"}
@@ -350,16 +393,17 @@ def _build_questionnaire_response(
     if event.payload.components:
         component_unit_codings = codings.get("component_unit") or {}
         for c in event.payload.components:
-            items.append({
-                "linkId": c.name,
-                "text": c.name,
-                "answer": [_qr_answer(
+            item: dict[str, Any] = {"linkId": c.name, "text": c.name}
+            # An answer with no value[x] would violate ele-1; emit a value-less
+            # item (linkId/text only, valid in R4) when the value is blank.
+            if _has_value(c.value):
+                item["answer"] = [_qr_answer(
                     c.value,
                     c.unit,
                     unit_coding=_coding_from_dict(component_unit_codings.get(c.name)),
-                )],
-            })
-    elif event.payload.value is not None:
+                )]
+            items.append(item)
+    elif _has_value(event.payload.value):
         items.append({
             "linkId": event.payload.label or event.category,
             "text": event.payload.label or event.category,
@@ -372,14 +416,12 @@ def _build_questionnaire_response(
     if items:
         qr["item"] = items
 
+    # QuestionnaireResponse has no `note` element in R4; carry the quality/
+    # provenance trail as a repeated DomainResource extension instead.
     if event.quality.flags:
-        qr["note"] = [
-            {
-                "text": (
-                    f"[{f.severity.value}/{f.code}] {f.message or ''}".strip()
-                )
-            }
-            for f in event.quality.flags
+        qr["extension"] = [
+            {"url": _QUALITY_FLAG_URL, "valueString": t}
+            for t in _flag_texts(event)
         ]
     return qr
 
@@ -399,8 +441,8 @@ def _qr_answer(
     unit: str | None,
     unit_coding: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    if value is None:
-        return {"valueString": ""}
+    if not _has_value(value):
+        return {}
     if isinstance(value, bool):
         return {"valueBoolean": value}
     if isinstance(value, (int, float)):
