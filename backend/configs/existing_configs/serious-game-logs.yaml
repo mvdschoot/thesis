@@ -23,7 +23,7 @@ defaults:
   context:
     source: serious-game-logs
     modality: game
-    device: null
+    device: Online Serious Game
     source_measurement_type: session log
   stage: structured
   source_record_id:
@@ -115,3 +115,4 @@ fhir:
     - Observation
     - Patient
     - Provenance
+    - Device

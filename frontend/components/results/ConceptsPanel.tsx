@@ -18,7 +18,7 @@ interface Props {
 }
 
 const KIND_LABEL: Record<ConceptSlotKind, string> = {
-  code: "Observation code & component (LOINC / SNOMED CT)",
+  code: "Observation code & component (LOINC)",
   unit: "valueQuantity unit (UCUM)",
   category: "Observation.category (FHIR)",
 };

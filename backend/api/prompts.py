@@ -473,11 +473,12 @@ def build_concept_suggest_user_prompt(slots: list[dict[str, Any]]) -> str:
              "Always try the 'label' as search query first.\n"]
     for i, s in enumerate(slots, 1):
         category = _extract_category(s)
+        # Privacy: never embed an actual data point (`sample.value`) from the
+        # records into the prompt. The unit is a unit of measure, not personal
+        # data, and helps the LLM pick the right UCUM code for unit slots.
         sample_parts = []
         if s.get("sample"):
             sv = s["sample"]
-            if sv.get("value") is not None:
-                sample_parts.append(f"value={sv['value']}")
             if sv.get("unit"):
                 sample_parts.append(f"unit={sv['unit']}")
         sample_str = f", sample: {{{', '.join(sample_parts)}}}" if sample_parts else ""

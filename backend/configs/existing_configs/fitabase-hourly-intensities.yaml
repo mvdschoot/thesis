@@ -17,7 +17,7 @@ defaults:
   context:
     source: fitabase-hourly-intensities
     modality: wearable
-    device: null
+    device: FitBit SmartWatch
     source_measurement_type: hourly intensity
   stage: structured
   source_record_id:

@@ -261,22 +261,34 @@ def _build_provenance(
     adapter_id: str,
     adapter_version: str,
     recorded_at: str,
+    device_full_urls: list[str] = (),
 ) -> dict[str, Any]:
-    """One Provenance resource pointing at every observation in the bundle."""
+    """One Provenance resource pointing at every observation in the bundle.
+
+    The assembler agent (the harmonia adapter) comes first; any Device
+    resources present in the bundle follow as device agents, so the audit
+    trail names what produced the data, not just what assembled it.
+    """
     prov_seed = f"{adapter_id}|{adapter_version}|{recorded_at}"
+    agents: list[dict[str, Any]] = [
+        {
+            "type": {"text": "assembler"},
+            "who": {
+                "display": f"harmonia adapter {adapter_id}@{adapter_version}",
+            },
+        }
+    ]
+    for url in device_full_urls:
+        agents.append({
+            "type": {"text": "device"},
+            "who": {"reference": url},
+        })
     return {
         "resourceType": "Provenance",
         "id": provenance_uuid(prov_seed),
         "recorded": recorded_at,
         "target": [{"reference": ref} for ref in target_full_urls],
-        "agent": [
-            {
-                "type": {"text": "assembler"},
-                "who": {
-                    "display": f"harmonia adapter {adapter_id}@{adapter_version}",
-                },
-            }
-        ],
+        "agent": agents,
     }
 
 
@@ -511,6 +523,7 @@ def build_bundle(
     entries: list[dict[str, Any]] = []
     include = set(config.include)
     obs_full_urls: list[str] = []  # populated when Provenance is included
+    device_full_urls: list[str] = []  # device agents for the Provenance resource
 
     # Unique Patient resources (one per subject_id).
     seen_patients: set[str] = set()
@@ -538,6 +551,7 @@ def build_bundle(
             seen_devices.add(key)
             device = _build_device(src, dev)
             entries.append(_entry(device["id"], device, bundle_type=config.bundle_type))
+            device_full_urls.append(f"urn:uuid:{device['id']}")
 
     # Questionnaire definitions — one per unique survey category. Items come
     # from each survey event's components when present; otherwise the event is
@@ -622,6 +636,7 @@ def build_bundle(
             adapter_id=adapter_id,
             adapter_version=adapter_version,
             recorded_at=recorded_at,
+            device_full_urls=device_full_urls,
         )
         entries.append(_entry(prov["id"], prov, bundle_type=config.bundle_type))
 

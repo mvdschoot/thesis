@@ -19,7 +19,7 @@ defaults:
   context:
     source: mhealth-fitbit
     modality: wearable
-    device: null
+    device: FitBit SmartWatch
     source_measurement_type:
       path: measurementType
   stage: structured
@@ -343,3 +343,4 @@ fhir:
     - Patient
     - Observation
     - Provenance
+    - Device
