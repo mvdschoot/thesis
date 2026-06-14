@@ -519,8 +519,6 @@ def suggest_concepts(req: SuggestConceptsRequest) -> SuggestConceptsResponse:
     if not isinstance(parsed, dict):
         return SuggestConceptsResponse(errors=["LLM returned non-object response."])
 
-    print("LLM suggestiuons:", parsed)
-
     if "suggestions" in parsed and isinstance(parsed["suggestions"], dict):
         raw_suggestions = parsed["suggestions"]
         raw_no_matches = parsed.get("no_matches", {})

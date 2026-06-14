@@ -32,3 +32,6 @@ out/
 transformation_results/
 *.tmp
 .Rproj.user
+
+# MkDocs build output (sources live in documentation/)
+site/

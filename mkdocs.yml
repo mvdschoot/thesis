@@ -1,0 +1,68 @@
+site_name: Progressive Harmonization — DSL & Engine Reference
+site_description: >-
+  User and reference documentation for the YAML adapter-config DSL and the
+  seven-stage harmonization pipeline engine.
+docs_dir: documentation
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - DSL:
+      - Overview: dsl/overview.md
+      - Reference: dsl/reference.md
+      - Value specs: dsl/value-specs.md
+      - Quality & flags: dsl/quality-and-flags.md
+      - Examples: dsl/examples.md
+      - Cookbook: dsl/cookbook.md
+      - Diagnostics: dsl/diagnostics.md
+  - Engine:
+      - Overview: engine/overview.md
+      - The seven stages: engine/stages.md
+      - Canonical event: engine/canonical-event.md
+      - FHIR projection: engine/fhir.md
+      - OMOP projection: engine/omop.md
+      - API contract: engine/api.md

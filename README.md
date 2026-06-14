@@ -27,6 +27,21 @@ impl/
   sample_data/      test fixtures (mHealth, Fitabase CSVs, clinical pilots, serious games, VR, questionnaires)
 ```
 
+## Documentation
+
+Extensive user/reference docs for the **YAML adapter-config DSL** and the **pipeline engine**
+live under `documentation/` and are published as a static site via MkDocs (Material theme):
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs serve     # live preview at http://127.0.0.1:8000
+mkdocs build     # static site -> ./site
+```
+
+Start at `documentation/index.md`. The DSL section covers every config block with copy-able
+examples; the Engine section documents each of the seven harmonization stages and the
+canonical event shape.
+
 ## Quick start (Docker)
 
 Requirements: Docker and Docker Compose.
